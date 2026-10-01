@@ -174,7 +174,7 @@ See the README for commands, and [`UPDATING.md`](UPDATING.md) for how changes ge
 
 ## 12. History
 
-This project grew out of the [public-data demo](https://github.com/Eesterlein/gunnison-land-attributes), which used the county's public download files and GitHub Pages. That demo is unchanged. This edition replaces the downloads with live RealWare data, and adds:
+This project grew out of the [public-data demo](https://github.com/Eesterlein/gunnison-land-attributes-demo), which used the county's public download files and GitHub Pages. That demo is unchanged. This edition replaces the downloads with live RealWare data, and adds:
 
 - LEA and neighborhood filters
 - multi-value coloring

@@ -1,6 +1,6 @@
 # Gunnison County Land Attribute Dashboard (RealWare edition)
 
-> **Status: in development.** This is the next version of the [Gunnison County Land Attributes demo](https://github.com/Eesterlein/gunnison-land-attributes). The demo is built from public data downloads. This version is designed to run on the Gunnison County Assessor's internal network and read data directly from RealWare. It is not yet deployed.
+> **Status: in development.** This is the next version of the [Gunnison County Land Attributes demo](https://github.com/Eesterlein/gunnison-land-attributes-demo). The demo is built from public data downloads. This version is designed to run on the Gunnison County Assessor's internal network and read data directly from RealWare. It is not yet deployed.
 
 An interactive parcel map and review tool for land attributes. Appraisers can:
 - see every parcel in the county
