@@ -1,0 +1,40 @@
+name: Build release package
+
+# When a version tag (v1.0, v1.1, ...) is pushed, build the server + dashboard and attach
+# LandAttributeDashboard.zip to a GitHub Release. The county server's update.ps1 downloads it.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Publish
+        run: dotnet publish server -c Release -o out
+
+      - name: Stamp version
+        run: |
+          cat > out/wwwroot/version.json <<EOF
+          {"version": "${GITHUB_REF_NAME}", "commit": "${GITHUB_SHA::7}", "built": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+          EOF
+          cp deploy/update.ps1 deploy/install.ps1 out/
+
+      - name: Package
+        run: cd out && zip -r ../LandAttributeDashboard.zip .
+
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" LandAttributeDashboard.zip deploy/install.ps1 --title "$GITHUB_REF_NAME" --notes "See CHANGELOG.md for what changed."

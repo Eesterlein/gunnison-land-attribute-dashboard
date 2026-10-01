@@ -1,0 +1,14 @@
+.DS_Store
+__pycache__/
+_site/
+~$*
+
+# Realware API sample responses: may contain owner data, never commit
+api-samples/
+data/raw/
+server/bin/
+server/obj/
+server/appsettings.Production.json
+
+# Local-only development tools (not part of the published project)
+dev-local/

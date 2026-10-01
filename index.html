@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Land Attribute Dashboard</title>
+<meta name="description" content="Gunnison County land attribute map and review dashboard, reading live data from RealWare.">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <h1>Gunnison County Land Attribute Dashboard</h1>
+    <span class="tag"><span id="data-asof"></span> <button id="refresh" class="linkbtn" hidden title="Pull the latest data from RealWare now">↻ Refresh</button></span>
+  </div>
+  <nav class="tabs" role="tablist">
+    <a href="#map" data-page="map" role="tab">Map</a>
+    <a href="#stats" data-page="stats" role="tab">Review &amp; Stats</a>
+    <a href="#about" data-page="about" role="tab">About</a>
+  </nav>
+  <div class="search">
+    <input id="search" type="search" placeholder="Search account, parcel, address, subdivision, LEA, neighborhood…" autocomplete="off" aria-label="Search">
+    <ul id="search-results" class="search-results" hidden></ul>
+  </div>
+</header>
+
+<!-- ============================ MAP PAGE ============================ -->
+<main id="page-map" class="page">
+  <aside class="panel" id="map-panel">
+    <section>
+      <label class="lbl" for="cat">Land attribute</label>
+      <select id="cat"></select>
+    </section>
+    <section class="values-section">
+      <div class="row between">
+        <label class="lbl" for="value-filter">Sub-attribute <span id="sel-count" class="muted"></span></label>
+        <div class="flip">
+          <button id="prev" title="Previous value (↑ or K)" aria-label="Previous value">▲</button>
+          <button id="next" title="Next value (↓ or J)" aria-label="Next value">▼</button>
+        </div>
+      </div>
+      <input id="value-filter" type="search" placeholder="Filter values…" autocomplete="off">
+      <ul id="values" class="values" role="listbox" aria-multiselectable="true" aria-label="Attribute values"></ul>
+      <div class="row between hint"><span>Click a value to show it · tick boxes to color up to 6</span></div>
+      <div class="row gap"><button id="color-all" class="btn small">Color all values</button><button id="clear-sel" class="btn small ghost">Clear</button></div>
+    </section>
+    <section class="summary" id="summary"></section>
+    <section>
+      <label class="lbl">Filters</label>
+      <div class="sub-lbl">Account type</div>
+      <div id="type-chips" class="chips"></div>
+      <div class="sub-lbl">LEA</div>
+      <div id="lea-ms" class="ms"></div>
+      <div class="sub-lbl">Neighborhood</div>
+      <div id="nbhd-ms" class="ms"></div>
+      <div id="filter-note" class="muted small"></div>
+      <label class="check"><input type="checkbox" id="show-flags"> <span>Outline in <strong class="red">red</strong> the parcels whose value for this attribute doesn't match most of their neighbors, or has conflicting entries</span></label>
+    </section>
+    <section>
+      <label class="lbl">Sales &amp; labels</label>
+      <div class="sub-lbl">Appraisal period</div>
+      <select id="period"></select>
+      <select id="extend"></select>
+      <div id="period-note" class="muted small"></div>
+      <label class="check"><input type="checkbox" id="sold-mark"> <span><i class="sw-dot"></i> Mark parcels with a qualified sale in this period</span></label>
+      <div id="sold-note" class="muted small" hidden></div>
+      <label class="check"><input type="checkbox" id="lbl-acct"> Callout: account number</label>
+      <label class="check"><input type="checkbox" id="lbl-sale"> Callout: qualified sale in this period (date, price, adjusted price)</label>
+      <div id="label-note" class="muted small" hidden>Zoom in to see callouts.</div>
+    </section>
+    <section>
+      <label class="lbl">Basemap</label>
+      <div class="seg" id="basemap">
+        <button data-bm="light" class="on">Light</button>
+        <button data-bm="aerial">Satellite</button>
+        <button data-bm="topo">Topo</button>
+      </div>
+    </section>
+    <div class="legend" id="legend">
+      <div id="legend-values" class="legend"></div>
+      <span><i class="sw sw-other"></i>Other value</span>
+      <span><i class="sw sw-none"></i>No land data or filtered out</span>
+      <span class="flag-legend" hidden><i class="sw sw-flag"></i>⚠ Doesn't match neighbors / conflicting entries</span>
+      <span class="sold-legend" hidden><i class="sw-dot"></i>Qualified sale in appraisal period</span>
+    </div>
+  </aside>
+  <div class="map-wrap">
+    <div id="map"></div>
+    <div id="loading" class="loading">Loading parcels…</div>
+    <div id="hover-tip" class="hover-tip" hidden></div>
+    <div id="flash" class="flash" hidden></div>
+    <aside id="detail" class="detail" hidden>
+      <button class="close" id="detail-close" aria-label="Close">×</button>
+      <div id="detail-body"></div>
+    </aside>
+  </div>
+</main>
+
+<!-- ============================ STATS PAGE ============================ -->
+<main id="page-stats" class="page scroll" hidden>
+  <div class="stats-inner">
+    <div class="filter-row">
+      <div><label class="lbl">Account type</label><div id="s-type-chips" class="chips"></div></div>
+      <div><label class="lbl">LEA</label><div id="s-lea-ms" class="ms"></div></div>
+      <div><label class="lbl">Neighborhood</label><div id="s-nbhd-ms" class="ms"></div></div>
+    </div>
+
+    <div class="tiles" id="tiles"></div>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Attribute coverage by account type</h2>
+        <p class="sub">Share of accounts with land data that have at least one value for each attribute. Click a cell to list the accounts missing it.</p>
+      </div>
+      <div class="table-scroll"><table class="coverage" id="coverage"></table></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Neighborhood consistency</h2>
+        <p class="sub">Flags accounts whose value differs from what most comparable properties around them carry. Neighbors are parcels within ~60 ft (across a typical road); stacked condo units count as neighbors of each other. For utilities, vacant lots are compared with vacant lots and improved with improved.</p>
+      </div>
+      <div class="controls">
+        <div><label class="lbl" for="nb-basis">Compare against</label>
+          <select id="nb-basis"><option value="adjacent">Adjacent parcels</option><option value="subdivision">Same subdivision</option></select></div>
+        <div><label class="lbl" for="nb-min">Minimum comparables</label>
+          <input id="nb-min" type="number" min="2" max="50" value="4"></div>
+        <div><label class="lbl" for="nb-agree">Neighbors agreeing</label>
+          <select id="nb-agree"><option value="0.6">60%+</option><option value="0.75" selected>75%+</option><option value="0.9">90%+</option><option value="1">100%</option></select></div>
+      </div>
+      <div class="table-scroll"><table class="issues" id="issue-summary"></table></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head row between wrap">
+        <div><h2>Attribute values</h2><p class="sub">Accounts carrying each value (an account can carry several values).</p></div>
+        <select id="dist-cat"></select>
+      </div>
+      <div id="dist" class="bars"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head row between wrap">
+        <div><h2>Review list</h2><p class="sub" id="review-count"></p></div>
+        <button id="export" class="btn">Download CSV</button>
+      </div>
+      <div class="controls">
+        <div><label class="lbl" for="r-issue">Issue</label><select id="r-issue"></select></div>
+        <div><label class="lbl" for="r-cat">Attribute</label><select id="r-cat"></select></div>
+        <div class="grow"><label class="lbl" for="r-text">Contains</label><input id="r-text" type="search" placeholder="account, subdivision, value…"></div>
+      </div>
+      <div class="table-scroll"><table class="review" id="review"></table></div>
+      <button id="more" class="btn ghost" hidden>Show more</button>
+    </section>
+  </div>
+</main>
+
+<!-- ============================ ABOUT PAGE ============================ -->
+<main id="page-about" class="page scroll" hidden>
+  <div class="stats-inner prose">
+    <h2>About this dashboard</h2>
+    <p>An internal tool for the Gunnison County Assessor's Office. It reads land attributes, land details, values and sales from RealWare through saved ListBuilder searches, refreshed weekly and on demand. Parcel shapes come from the county tax-parcel GIS layer. RealWare remains the system of record.</p>
+    <h3>Data</h3>
+    <dl id="about-data" class="kv"></dl>
+    <h3>Appraisal periods</h3>
+    <p>Gunnison County reappraises real property every odd year. Values reflect market conditions on June 30 of the prior year, using a minimum of 24 months of qualified sales (July 1 three years before through June 30 of the year before). Sale labels show the most recent <em>qualified</em> sale inside the selected period, which can be extended back in 6-month steps.</p>
+    <h3>Review checks</h3>
+    <ul id="about-checks"></ul>
+  </div>
+</main>
+
+<div id="tip" class="tip" hidden></div>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

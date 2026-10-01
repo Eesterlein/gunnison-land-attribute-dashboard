@@ -1,0 +1,39 @@
+{
+  "_about": "The RealWare ListBuilder searches the dashboard reads. For each search, only the 'keep' columns are saved for the dashboard. Sales older than salesYearsToKeep years are dropped when saved.",
+  "salesYearsToKeep": 10,
+  "searches": [
+    {
+      "name": "accounts",
+      "queryId": 43623,
+      "title": "LAD - Accounts",
+      "keep": ["Account #", "Account Type", "Parcel #", "Property Type", "Property Address", "Property Area",
+               "Economic Area", "Subdivision", "Condo", "Neighborhood Code", "Neighborhood"]
+    },
+    {
+      "name": "land_attributes",
+      "queryId": 43625,
+      "title": "LAD - Land Attributes",
+      "keep": ["Account #", "Attribute Type", "Attribute Sub Type"]
+    },
+    {
+      "name": "land_details",
+      "queryId": 43626,
+      "title": "LAD - Land Details",
+      "keep": ["Account #", "Default LEA", "LEA Description", "Gross Acres", "Gross Square Feet"]
+    },
+    {
+      "name": "sales",
+      "queryId": 43627,
+      "title": "LAD - Sales",
+      "keep": ["ACCOUNT NO", "RECEPTION NO", "DEED DESCRIPTION", "SALE DATE", "SALE PRICE", "ADJUSTED SALE PRICE",
+               "VACANT OR IMPROVED AT TIME OF SALE", "TYPE OF TRANSACTION", "INVALID SALE REASON"],
+      "dateColumn": "SALE DATE"
+    },
+    {
+      "name": "values",
+      "queryId": 43628,
+      "title": "LAD - Values",
+      "keep": ["ACCOUNTNO", "LANDACTUAL", "IMPSACTUAL", "TOTALACTUAL"]
+    }
+  ]
+}
