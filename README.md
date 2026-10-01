@@ -31,6 +31,7 @@ Dashboard in the browser (map + Review & Stats)
 
 | Document | What's in it |
 |---|---|
+| [`docs/DEPLOYMENT_CHECKLIST.md`](docs/DEPLOYMENT_CHECKLIST.md) | **Start here:** decisions and sign-off before going into production (access, data, outside services, governance, updates) |
 | [`docs/HOSTING.md`](docs/HOSTING.md) | Step-by-step install on the county's IIS server (written for IT, or an AI assistant helping IT) |
 | [`docs/UPDATING.md`](docs/UPDATING.md) | How suggestions become updates on the county server (`update.ps1`), and how to roll back |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | How it's built: data flow, cleaning, review checks, map performance, server design |
