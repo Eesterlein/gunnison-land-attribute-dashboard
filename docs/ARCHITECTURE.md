@@ -168,7 +168,6 @@ The weekly schedule (`WeeklySchedule`) runs Sunday at 2:00 AM by default, and on
 
 | Tool | What it does |
 |---|---|
-| `scripts/make_dev_data.py` | Turns the public assessor downloads into the same five files the server saves, for a full-county test dataset. It has no neighborhoods, and older attribute types only. |
 
 See the README for commands, and [`UPDATING.md`](UPDATING.md) for how changes get from development to the county server.
 

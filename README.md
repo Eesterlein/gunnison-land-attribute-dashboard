@@ -39,24 +39,13 @@ Dashboard in the browser (map + Review & Stats)
 | [`docs/DATA_REQUIREMENTS.md`](docs/DATA_REQUIREMENTS.md) | The ListBuilder searches, their columns, and the appraisal periods |
 | [`server/`](server) | The server program (C#, .NET 10): `Program.cs` (web host), `Refresher.cs` (RealWare refresh) |
 
-## Local development (no API needed)
-
-`scripts/make_dev_data.py` turns the public assessor downloads into the same files the server program saves from the API, so the dashboard can be run with full-county data:
-
-```bash
-python scripts/make_dev_data.py "folder with the public .xlsx downloads"
-python -m http.server 8000      # then open http://localhost:8000
-```
-
-The Refresh button only appears when the dashboard is served by the server program.
-
 ## Repository layout
 
 ```
 index.html, assets/        dashboard (MapLibre GL JS, no build step)
 config/searches.json       the ListBuilder searches + which columns are kept
 data/                      parcel shapes; data/raw/ holds saved search output (git-ignored)
-scripts/                   shapefile → map geometry; public downloads → dev data
+scripts/                   shapefile → map geometry
 server/                    server program (C#/.NET 10): serves the site, runs the weekly refresh
 docs/                      hosting, updating, architecture, data requirements
 deploy/                    install.ps1 (one-time install) and update.ps1 (updates) for the county server
