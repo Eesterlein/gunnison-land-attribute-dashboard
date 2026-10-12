@@ -4,26 +4,26 @@
   "searches": [
     {
       "name": "accounts",
-      "queryId": 43623,
+      "queryId": 43632,
       "title": "LAD - Accounts",
       "keep": ["Account #", "Account Type", "Parcel #", "Property Type", "Property Address", "Property Area",
                "Economic Area", "Subdivision", "Condo", "Neighborhood Code", "Neighborhood"]
     },
     {
       "name": "land_attributes",
-      "queryId": 43625,
+      "queryId": 43633,
       "title": "LAD - Land Attributes",
       "keep": ["Account #", "Attribute Type", "Attribute Sub Type"]
     },
     {
       "name": "land_details",
-      "queryId": 43626,
+      "queryId": 43634,
       "title": "LAD - Land Details",
       "keep": ["Account #", "Default LEA", "LEA Description", "Gross Acres", "Gross Square Feet"]
     },
     {
       "name": "sales",
-      "queryId": 43627,
+      "queryId": 43636,
       "title": "LAD - Sales",
       "keep": ["ACCOUNT NO", "RECEPTION NO", "DEED DESCRIPTION", "SALE DATE", "SALE PRICE", "ADJUSTED SALE PRICE",
                "VACANT OR IMPROVED AT TIME OF SALE", "TYPE OF TRANSACTION", "INVALID SALE REASON"],
@@ -31,7 +31,7 @@
     },
     {
       "name": "values",
-      "queryId": 43628,
+      "queryId": 43637,
       "title": "LAD - Values",
       "keep": ["ACCOUNTNO", "LANDACTUAL", "IMPSACTUAL", "TOTALACTUAL"]
     }
