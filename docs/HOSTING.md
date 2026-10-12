@@ -16,7 +16,7 @@ One small ASP.NET Core (.NET 10) program, `LadServer`. It:
    - runs five saved ListBuilder searches
    - saves the results as JSON files in `wwwroot\data\raw\`
 
-**It is read-only.** It never creates, changes or deletes anything in RealWare. The searches it runs are listed in `wwwroot\config\searches.json` (query IDs 43623, 43625, 43626, 43627, 43628).
+**It is read-only.** It never creates, changes or deletes anything in RealWare. The searches it runs are listed in `wwwroot\config\searches.json` (query IDs 43632, 43633, 43634, 43636, 43637).
 
 **Safety rails:** a refresh only replaces the saved data if every search succeeds. If any search fails, returns nothing, hits the row limit, or returns less than half its previous row count, the old data stays in place and the error appears at `/api/status`.
 

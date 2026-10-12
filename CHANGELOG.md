@@ -2,6 +2,10 @@
 
 Each version is tagged on GitHub and has an install package under **Releases**. To install one on the county server: `update.ps1 -Version <version>`.
 
+## v1.1 (2026-10-12)
+
+- **Data:** points the app at the new saved ListBuilder searches: LAD - Accounts 43632, Land Attributes 43633, Land Details 43634, Sales 43636, Values 43637. No other changes. Updating keeps the existing RealWare connection settings.
+
 ## v1.0 (2026-10-01)
 
 First release of the RealWare edition.

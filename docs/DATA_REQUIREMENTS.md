@@ -4,11 +4,11 @@ The app reads five saved ListBuilder searches from RealWare. It runs them once a
 
 | Query ID | Search | One row per | Used for |
 |---|---|---|---|
-| 43623 | **LAD - Accounts** | account | Account type, parcel #, address, area, economic area, subdivision, condo, neighborhood |
-| 43625 | **LAD - Land Attributes** | land attribute | Every attribute type and sub-type (views, utilities, site access, land type, unique characteristics, …) |
-| 43626 | **LAD - Land Details** | land line | LEA code and description, gross acres and square feet |
-| 43627 | **LAD - Sales** | sale / account | Most recent qualified sale in the appraisal period (sale price and adjusted sale price) |
-| 43628 | **LAD - Values** | account | Land, improvement and total actual value; "improved" test |
+| 43632 | **LAD - Accounts** | account | Account type, parcel #, address, area, economic area, subdivision, condo, neighborhood |
+| 43633 | **LAD - Land Attributes** | land attribute | Every attribute type and sub-type (views, utilities, site access, land type, unique characteristics, …) |
+| 43634 | **LAD - Land Details** | land line | LEA code and description, gross acres and square feet |
+| 43636 | **LAD - Sales** | sale / account | Most recent qualified sale in the appraisal period (sale price and adjusted sale price) |
+| 43637 | **LAD - Values** | account | Land, improvement and total actual value; "improved" test |
 
 ## Notes
 
