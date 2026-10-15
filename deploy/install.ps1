@@ -41,7 +41,8 @@ $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 if (-not $admin) { throw "Please run PowerShell as Administrator." }
 if (-not (Get-Service W3SVC -ErrorAction SilentlyContinue)) { throw "IIS is not installed. Install the Web Server (IIS) role first (see docs/HOSTING.md, Step 1)." }
 Import-Module WebAdministration
-if (-not (Test-Path "$env:windir\System32\inetsrv\aspnetcorev2.dll")) {
+$ancm = @("$env:ProgramFiles\IIS\Asp.Net Core Module\V2\aspnetcorev2.dll", "$env:windir\System32\inetsrv\aspnetcorev2.dll")
+if (-not ($ancm | Where-Object { Test-Path $_ })) {
     throw "The ASP.NET Core Hosting Bundle for .NET 10 is not installed. Download it from https://dotnet.microsoft.com/download/dotnet/10.0 (Hosting Bundle), install it, run 'iisreset', then run this script again."
 }
 if (Get-Command Get-WindowsFeature -ErrorAction SilentlyContinue) {
@@ -64,7 +65,9 @@ try {
     Invoke-WebRequest -Uri $url -OutFile "$work\lad.zip" -UseBasicParsing
     Expand-Archive -Path "$work\lad.zip" -DestinationPath "$work\pkg"
     if (-not (Test-Path "$work\pkg\LadServer.dll")) { throw "The download doesn't look like a dashboard package (no LadServer.dll)." }
+    # Never overwrite server-specific settings or saved data (same as update.ps1).
     Remove-Item "$work\pkg\appsettings.Production.json" -ErrorAction SilentlyContinue
+    if (Test-Path "$work\pkg\wwwroot\data\raw") { Remove-Item "$work\pkg\wwwroot\data\raw" -Recurse -Force }
     New-Item -ItemType Directory -Path $SiteDir -Force | Out-Null
     if (Test-Path "IIS:\AppPools\$AppPool") {
         if ((Get-WebAppPoolState -Name $AppPool).Value -ne "Stopped") { Stop-WebAppPool -Name $AppPool; Start-Sleep -Seconds 5 }
@@ -96,7 +99,16 @@ if ((Test-Path $settingsPath) -and -not $ResetSettings) {
     $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
     try { $pass = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
     finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
-    $settings = @{ Realware = @{ BaseUrl = $baseUrl; Username = $user; Password = $pass; GrantType = "password" } }
+    $realware = @{ BaseUrl = $baseUrl; Username = $user; Password = $pass; GrantType = "password" }
+    if ($baseUrl -notmatch '^https://') {
+        Write-Host "   This address isn't https://, so the RealWare password would be sent unencrypted." -ForegroundColor Yellow
+        $ok = Read-Host "   Allow http:// anyway, until RealWare has HTTPS? (y/N)"
+        if ($ok -match '^(y|yes)$') { $realware.AllowInsecureHttp = $true }
+        else { Write-Host "   Not allowed: refreshes will fail until the address is https:// (run with -ResetSettings to change it)." -ForegroundColor Yellow }
+    }
+    $settings = @{ Realware = $realware }
+    # Only answer requests for this site's own host name (ASP.NET Core host filtering).
+    if ($HostName) { $settings.AllowedHosts = $HostName }
     $settings | ConvertTo-Json -Depth 3 | Set-Content -Path $settingsPath -Encoding UTF8
     $pass = $null
 

@@ -64,4 +64,4 @@ C:\inetpub\LandAttributeDashboard\update.ps1 -Version v1.0
 | New parcel shapefile from GIS | Rebuild `data/parcels.geojson` + `data/geo_index.json` with `scripts/build_geometry.py`, then Steps 2 → 4. |
 | An update caused a problem | Roll back: `update.ps1 -Version <previous version>`. Then fix it here. |
 | RealWare password changed | Not an update. IT edits `appsettings.Production.json` and restarts the app pool. Until then, refreshes fail with "RealWare sign-in failed" and the last good data stays on screen. |
-| Weekly refresh failed | Open `/api/status`; `lastError` says why. The old data is still being shown. |
+| Weekly refresh failed | Open `/api/status`; `lastError` says why, and the server log has the full details. The old data is still being shown. |

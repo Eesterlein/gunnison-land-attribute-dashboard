@@ -44,12 +44,22 @@
   const fmt = (n) => (n == null ? "—" : Math.round(n).toLocaleString());
   const pct = (a, b) => (b ? (100 * a / b) : 0);
   const money = (n) => (n == null ? "—" : "$" + Math.round(n).toLocaleString());
+  // Hover tips are built from text nodes only, so a value from RealWare can never become HTML.
+  function showTip(el, heading, text) {
+    el.replaceChildren();
+    if (heading) el.append(Object.assign(document.createElement("strong"), { textContent: heading }));
+    (text || "").split("\n").forEach((line) => { if (el.childNodes.length) el.append(document.createElement("br")); el.append(line); });
+  }
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
   const mdy = (d) => `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
   const hexA = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; };
   function downloadCSV(name, header, rows) {
-    const q = (v) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const q = (v) => {
+      let s = String(v ?? "");
+      if (/^[=+\-@\t\r]/.test(s) && !/^[-+]?\d+(\.\d+)?$/.test(s)) s = "'" + s;   // stop Excel running it as a formula
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
     const url = URL.createObjectURL(new Blob([[header, ...rows].map((r) => r.map(q).join(",")).join("\n")], { type: "text/csv" }));
     const a = Object.assign(document.createElement("a"), { href: url, download: name });
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
@@ -270,7 +280,7 @@
     $("dist").onclick = (e) => { const t = e.target.closest("[data-v]"); if (!t) return; S.ci = S.distCi; $("cat").value = S.ci; S.sel = new Map([[+t.dataset.v, 0]]); location.hash = "#map"; };
 
     const tip = $("tip");
-    document.addEventListener("mouseover", (e) => { const el = e.target.closest("[data-tip]"); if (!el) { tip.hidden = true; return; } tip.innerHTML = el.dataset.tip; tip.hidden = false; });
+    document.addEventListener("mouseover", (e) => { const el = e.target.closest("[data-tip]"); if (!el) { tip.hidden = true; return; } showTip(tip, el.dataset.tipB, el.dataset.tip); tip.hidden = false; });
     document.addEventListener("mousemove", (e) => { if (!tip.hidden) { tip.style.left = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8) + "px"; tip.style.top = (e.clientY + 16) + "px"; } });
     renderValues(); renderFilterNote();
   }
@@ -718,7 +728,8 @@
     const cell = (ids, has, ci, t) => {
       if (!ids.length) return `<td class="c">—</td>`;
       const n = ids.filter(has).length, p = pct(n, ids.length), [bg, fg] = seqColor(p);
-      return `<td class="c" style="background:${bg};color:${fg}" data-ci="${ci}" ${t === "All" ? "" : `data-type="${esc(t)}"`} data-tip="<strong>${esc(t)}</strong><br>${fmt(n)} of ${fmt(ids.length)} have it<br>${fmt(ids.length - n)} missing — click to list">${p.toFixed(p > 99 && p < 100 ? 1 : 0)}%</td>`;
+      return `<td class="c" style="background:${bg};color:${fg}" data-ci="${ci}" ${t === "All" ? "" : `data-type="${esc(t)}"`} data-tip-b="${esc(t)}" data-tip="${fmt(n)} of ${fmt(ids.length)} have it
+${fmt(ids.length - n)} missing — click to list">${p.toFixed(p > 99 && p < 100 ? 1 : 0)}%</td>`;
     };
     const byCol = cols.map(([, f]) => acc.filter(f));
     let html = `<thead><tr><th>Attribute</th>${cols.map(([t], k) => `<th class="c">${esc(t)}<br><span class="th-n">${fmt(byCol[k].length)}</span></th>`).join("")}</tr></thead><tbody>`;
@@ -753,7 +764,8 @@
     const MAX = 40, extra = items.length - MAX; items = items.slice(0, MAX);
     const max = Math.max(1, noVal, ...items.map((x) => x[1]));
     const bar = (v, name, n, muted) => `<div class="name" title="${esc(name)}">${esc(name)}</div>
-      <div class="track" data-v="${v}" data-tip="<strong>${esc(name)}</strong><br>${fmt(n)} accounts · ${pct(n, landN).toFixed(1)}% of accounts with land data<br>Click to view on map" style="cursor:pointer">
+      <div class="track" data-v="${v}" data-tip-b="${esc(name)}" data-tip="${fmt(n)} accounts · ${pct(n, landN).toFixed(1)}% of accounts with land data
+Click to view on map" style="cursor:pointer">
       <span class="fill" style="width:${(78 * n / max).toFixed(2)}%;${muted ? "background:var(--axis)" : ""}"></span><span class="val">${fmt(n)}</span></div>`;
     $("dist").innerHTML = items.map(([v, n]) => bar(v, VALUES[ci][v], n)).join("") + bar(NO_VALUE, "No value recorded", noVal, true) +
       (extra > 0 ? `<div></div><div class="val muted">+ ${extra} more values (see the map's value list)</div>` : "");
@@ -834,7 +846,13 @@
       btn.disabled = true; $("data-asof").textContent = "Starting refresh…";
       try {
         const r = await fetch("api/refresh", { method: "POST" });
-        if (!r.ok && r.status !== 409) throw new Error("HTTP " + r.status);
+        if (r.status === 409) {
+          const msg = (await r.json().catch(() => ({}))).message;
+          const st = await (await fetch("api/status", { cache: "no-store" })).json().catch(() => ({}));
+          if (st.running) return poll(meta.refreshedAt);
+          $("data-asof").textContent = msg || "Refresh isn't available right now."; btn.disabled = false; return;
+        }
+        if (!r.ok) throw new Error("HTTP " + r.status);
         poll(meta.refreshedAt);
       } catch (e) { $("data-asof").textContent = "Refresh failed: " + e.message; btn.disabled = false; }
     };

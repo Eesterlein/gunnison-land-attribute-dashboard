@@ -39,13 +39,12 @@ Staff browsers do load a few public resources from the internet. **No county dat
 
 | Resource | Purpose |
 |---|---|
-| unpkg.com | Map library (MapLibre GL JS) |
 | server.arcgisonline.com (Esri) | Basemap images: light, satellite, topo |
 | protomaps.github.io | Fonts for map labels |
 | property.spatialest.com | Links that open the County's public property page for an account |
 | github.com | Downloading releases, only when the install or update script is run |
 
-The map library and fonts can be hosted on the county server instead, if preferred.
+The map library (MapLibre GL JS) ships with the dashboard, so no code is loaded from the internet. The label fonts can also be hosted on the county server, if preferred.
 
 ### Who can access it?
 Anyone who can reach the site on the county network. To limit it to signed-in County employees, turn on **Windows Authentication** and turn off **Anonymous Authentication** for the site in IIS. No code change is needed.
@@ -54,18 +53,20 @@ Anyone who can reach the site on the county network. To limit it to signed-in Co
 - It is stored only in `appsettings.Production.json` on the server.
 - The installer locks that file so only Administrators, SYSTEM and the dashboard's app pool can read it.
 - It is never sent to browsers and never stored in this repository.
-- Only the `wwwroot` folder is served to browsers. Requests for the settings file return 404.
+- Only the `wwwroot` folder is served to browsers. Requests for the settings file or `config\searches.json` return 404.
+- It is only sent to RealWare over HTTPS. An `http://` address is refused unless `Realware:AllowInsecureHttp` is explicitly turned on.
+- Error messages shown in the browser never include the RealWare address; details go to the server log.
 
 ### What are the security risks, and how are they handled?
 
 | Risk | How it's handled |
 |---|---|
 | The RealWare login sits on the server | Locked-down settings file; never served or committed. The account only needs read access to the saved searches. A dedicated service account can replace a personal one at any time by editing the file. |
-| Anyone with site access can trigger a refresh | A refresh only runs read-only saved searches. It is limited to once every 5 minutes, and only one can run at a time. |
+| Anyone with site access can trigger a refresh | A refresh only runs read-only saved searches. Every attempt counts toward a 5-minute gap, only one can run at a time, and after a failed sign-in the button pauses for 15 minutes or more (doubling, up to 4 hours) so the account can't be locked out. |
 | A bad or partial refresh replaces good data | Refused automatically. Data is only replaced if every search succeeds. A search that returns nothing, hits the row limit, or shrinks to under half its previous size keeps the old data, and the error appears at `/api/status`. |
-| Outside resources (map library, fonts, basemaps) | Public, read-only content; no county data sent. The map library and fonts can be hosted locally if IT prefers. |
-| Software updates | Release packages are built by GitHub from the public code in this repository, so IT can review any change before installing it. `update.ps1` never touches the settings file or saved data, and `update.ps1 -Version <old>` rolls back. |
-| User input | No logins, forms, file uploads or stored user input. The only actions are viewing and the read-only Refresh. |
+| Outside resources (fonts, basemaps) | Public, read-only content; no county data sent, and no scripts loaded. The fonts can be hosted locally if IT prefers. |
+| Software updates | Release packages are built by GitHub from the public code in this repository, with build steps pinned to exact versions and a SHA-256 checksum published for each package, so IT can review and verify any change before installing it. `update.ps1` never touches the settings file or saved data, and `update.ps1 -Version <old>` rolls back. |
+| User input | No logins, forms, file uploads or stored user input. The only actions are viewing and the read-only Refresh. Values from RealWare are always shown as text, never as page code, and CSV exports are protected against spreadsheet formulas. |
 
 ### Is it an AI system under the County AI Policy?
 No. It uses no machine learning, predictions or automated decisions. Every highlight and flag comes from a written rule, for example "most neighbors have X, this account has Y". All the rules are listed in `ARCHITECTURE.md`, section 6.

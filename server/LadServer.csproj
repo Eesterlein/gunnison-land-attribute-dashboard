@@ -10,11 +10,12 @@
   </PropertyGroup>
 
   <!-- The dashboard's web files are copied into wwwroot/ next to the program.
-       Only wwwroot/ is served to browsers; appsettings*.json (with the RealWare login) never is. -->
+       Only wwwroot/ is served to browsers; appsettings*.json (with the RealWare login) and config/ never are. -->
   <ItemGroup>
     <Content Include="../index.html" Link="wwwroot/index.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../assets/**" Link="wwwroot/assets/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="../config/**" Link="wwwroot/config/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- searches.json is read only by the server, so it sits next to the program, outside wwwroot/. -->
+    <Content Include="../config/**" Link="config/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../data/parcels.geojson;../data/geo_index.json" Link="wwwroot/data/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 

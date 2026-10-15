@@ -28,6 +28,6 @@ app.UseStaticFiles(new StaticFileOptions
 
 app.MapGet("/api/status", (Refresher r) => Results.Json(r.Status));
 app.MapPost("/api/refresh", (Refresher r) =>
-    r.TryStart("button") ? Results.Accepted() : Results.Conflict(new { message = "A refresh is already running or ran in the last few minutes." }));
+    r.TryStart("button", out var refusal) ? Results.Accepted() : Results.Conflict(new { message = refusal }));
 
 app.Run();

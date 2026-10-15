@@ -16,15 +16,15 @@ One small ASP.NET Core (.NET 10) program, `LadServer`. It:
    - runs five saved ListBuilder searches
    - saves the results as JSON files in `wwwroot\data\raw\`
 
-**It is read-only.** It never creates, changes or deletes anything in RealWare. The searches it runs are listed in `wwwroot\config\searches.json` (query IDs 43632, 43633, 43634, 43636, 43637).
+**It is read-only.** It never creates, changes or deletes anything in RealWare. The searches it runs are listed in `config\searches.json` (next to the program, not web-accessible) (query IDs 43632, 43633, 43634, 43636, 43637).
 
 **Safety rails:** a refresh only replaces the saved data if every search succeeds. If any search fails, returns nothing, hits the row limit, or returns less than half its previous row count, the old data stays in place and the error appears at `/api/status`.
 
 ```
 Staff browser ──HTTP(S)──▶ IIS ─▶ LadServer ──HTTP(S)──▶ RealWare API (internal)
      │                                        └── writes wwwroot\data\raw\*.json
-     └──HTTPS──▶ unpkg.com (map library), server.arcgisonline.com (basemaps),
-                 protomaps.github.io (label fonts), property.spatialest.com (record links)
+     └──HTTPS──▶ server.arcgisonline.com (basemaps), protomaps.github.io (label fonts),
+                 property.spatialest.com (record links)
 ```
 
 ---
@@ -33,7 +33,7 @@ Staff browser ──HTTP(S)──▶ IIS ─▶ LadServer ──HTTP(S)──▶
 
 | Item | Example | Who knows it |
 |---|---|---|
-| RealWare API address | provided by the Assessor's Office | Assessor's Office |
+| RealWare API address | provided by the Assessor's Office. Should start with `https://` (see `AllowInsecureHttp` in Step 4) | Assessor's Office |
 | RealWare username and password the app signs in with | the assessor staff member who owns the LAD searches | Assessor's office |
 | Sign-in grant type | `password` (the default; change only if told otherwise) | Assessor's Office |
 | Server and folder to install to | `C:\inetpub\LandAttributeDashboard` | IT |
@@ -67,7 +67,7 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 
    It uses port 8080 by default. Add `-Port 80 -HostName <name>` to use a host name instead.
 
-3. Answer the three questions it asks: **RealWare API address**, **username** and **password** (from Step 0). The password isn't shown as you type.
+3. Answer the three questions it asks: **RealWare API address**, **username** and **password** (from Step 0). The password isn't shown as you type. If the address is `http://`, it also asks whether to allow that for now.
 
 The installer:
 - downloads the program into `C:\inetpub\LandAttributeDashboard`
@@ -98,7 +98,9 @@ dotnet publish server -c Release -o C:\inetpub\LandAttributeDashboard
 copy deploy\*.ps1 C:\inetpub\LandAttributeDashboard\
 ```
 
-Either way, the folder contains `LadServer.dll`, `web.config`, `appsettings.json`, `install.ps1`, `update.ps1` and `wwwroot\` (the dashboard and parcel shapes). Only `wwwroot\` is ever served to browsers.
+Either way, the folder contains `LadServer.dll`, `web.config`, `appsettings.json`, `config\searches.json`, `install.ps1`, `update.ps1` and `wwwroot\` (the dashboard and parcel shapes). Only `wwwroot\` is ever served to browsers.
+
+**Checking a download:** each release includes `SHA256SUMS.txt`. In PowerShell, `Get-FileHash .\LandAttributeDashboard.zip` should print the same SHA-256 as that file.
 
 **Check:** `C:\inetpub\LandAttributeDashboard\wwwroot\index.html` exists.
 
@@ -136,6 +138,10 @@ Create `C:\inetpub\LandAttributeDashboard\appsettings.Production.json`. This fil
 
 Then restrict this file so only Administrators and `IIS AppPool\LandAttributeDashboard` can read it.
 
+**HTTPS:** the program refuses an `http://` RealWare address, because the password is sent at sign-in. If RealWare isn't on HTTPS yet, add `"AllowInsecureHttp": true` inside `"Realware"` for now, and remove it once RealWare has HTTPS.
+
+**Host name:** set `"AllowedHosts": "<site host name>"` (top level, outside `"Realware"`) so the program only answers requests for the dashboard's own address. `install.ps1 -HostName` does this for you.
+
 *Alternative:* the same values can be set as environment variables on the app pool instead of in a file: `Realware__BaseUrl`, `Realware__Username`, `Realware__Password` (two underscores).
 
 All other settings have working defaults in `appsettings.json`:
@@ -144,9 +150,12 @@ All other settings have working defaults in `appsettings.json`:
 |---|---|---|
 | `Realware:MaxResults` | 500000 | Rows requested per search. If a search returns exactly this many, the refresh stops (results may be cut off). |
 | `Realware:IgnoreCertificateErrors` | false | Set true only if the API uses a self-signed HTTPS certificate the server doesn't trust. |
+| `Realware:AllowInsecureHttp` | false | Set true only while RealWare is reachable over `http://` alone. The password is sent unencrypted while it's on. |
 | `Realware:TimeoutMinutes` | 10 | Per-request timeout. |
 | `Refresh:DayOfWeek` / `Refresh:Hour` | Sunday / 2 | Weekly refresh time (server local time). |
-| `Refresh:MinMinutesBetweenRefreshes` | 5 | How soon the Refresh button can be used again. |
+| `Refresh:MinMinutesBetweenRefreshes` | 5 | How soon the Refresh button can be used again after any attempt, successful or not. |
+| `Refresh:SignInBackoffMinutes` / `Refresh:MaxSignInBackoffMinutes` | 15 / 240 | After a failed RealWare sign-in, the Refresh button pauses this long, doubling with each further failure up to the maximum, so the account isn't locked. |
+| `AllowedHosts` | `*` | Host names the program answers to. Set it to the site's host name (see above). |
 | `Refresh:MinRowRatio` | 0.5 | Refuse a refresh if a search shrinks below this share of its previous rows. |
 
 Restart the app pool after changing settings.
@@ -158,6 +167,8 @@ Restart the app pool after changing settings.
 1. Start (or recycle) the app pool. On first start, with no data saved yet, the program runs a refresh straight away.
 2. Open `http://<site>/api/status`. Within a minute or two it should show `"running": false`, a recent `"lastRefresh"` and `"lastError": null`.
    - If `lastError` mentions **sign-in failed**, check the username, password and grant type.
+   - If it mentions **https://**, see *HTTPS* in Step 4.
+   - If it says **Could not get data from RealWare**, the server couldn't reach the API or got an unexpected reply. The full error is in the server log (see *Logs* below).
    - If it mentions **HTTP 404 on a query**, the saved search ID doesn't exist or isn't visible to that user.
    - If it mentions **maxResults**, raise `Realware:MaxResults`.
 3. Open `http://<site>/`. The map should load with parcels. The header should show **"Data as of <date>"** and a **↻ Refresh** button.
@@ -180,7 +191,8 @@ Expected row counts, roughly: accounts ~21,000; land attributes ~100,000–150,0
 | Symptom | Likely cause |
 |---|---|
 | HTTP 500.19 / 500.30 when opening the site | ASP.NET Core Hosting Bundle missing, or IIS not restarted after installing it. |
-| Map area is blank | Browsers can't reach `unpkg.com` or `server.arcgisonline.com`; check the web filter or proxy. |
+| Map area is blank | Browsers can't reach `server.arcgisonline.com`; check the web filter or proxy. |
+| Refresh button says it's paused after a failed sign-in | Fix the login in `appsettings.Production.json` and recycle the app pool; that also clears the pause. |
 | No Refresh button | The page isn't being served by LadServer (for example, opened as a file), or `/api/status` is blocked. |
 | Data never updates on Sundays | App pool isn't AlwaysRunning, its idle time-out isn't 0, or Preload isn't enabled (Step 3). |
 | `Access to the path ... denied` in logs | App pool identity lacks Modify rights on `wwwroot\data` (Step 3). |

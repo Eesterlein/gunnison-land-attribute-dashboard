@@ -54,10 +54,24 @@ try {
             try { Copy-Item -Path "$work\pkg\*" -Destination $SiteDir -Recurse -Force; break }
             catch { if ($attempt -ge 5) { throw }; Write-Host "   files still in use, retrying..."; Start-Sleep -Seconds 3 }
         }
+        # From v1.2, searches.json lives in config\ next to the program, not under wwwroot\. Remove the old copy.
+        if ((Test-Path "$SiteDir\config\searches.json") -and (Test-Path "$SiteDir\wwwroot\config")) {
+            Remove-Item "$SiteDir\wwwroot\config" -Recurse -Force
+        }
     }
     finally {
         Write-Host "4/4 Starting app pool '$AppPool'"
         Start-WebAppPool -Name $AppPool
+    }
+
+    # From v1.2, an http:// RealWare address is refused unless Realware:AllowInsecureHttp is true.
+    $prod = "$SiteDir\appsettings.Production.json"
+    if (Test-Path $prod) {
+        $rw = (Get-Content $prod -Raw | ConvertFrom-Json).Realware
+        if ($rw -and "$($rw.BaseUrl)" -match '^http://' -and -not $rw.AllowInsecureHttp) {
+            Write-Host "WARNING: the RealWare address in appsettings.Production.json is http://, and this version refuses that by default." -ForegroundColor Yellow
+            Write-Host "         Refreshes will fail until you either switch it to https:// or add  ""AllowInsecureHttp"": true  under ""Realware"", then recycle the app pool." -ForegroundColor Yellow
+        }
     }
 
     $ver = Get-Content "$SiteDir\wwwroot\version.json" -Raw -ErrorAction SilentlyContinue

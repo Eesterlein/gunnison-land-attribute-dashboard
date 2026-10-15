@@ -16,23 +16,50 @@ public sealed class Refresher(IConfiguration config, IWebHostEnvironment env, IL
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _lock = new();
     private RefreshStatus _status = new();
+    private DateTimeOffset? _lastAttempt;   // every attempt, successful or not
+    private int _signInFailures;            // consecutive failed sign-ins (resets after a successful one)
 
     public RefreshStatus Status { get { lock (_lock) return _status with { }; } }
     private void Set(Func<RefreshStatus, RefreshStatus> f) { lock (_lock) _status = f(_status); }
 
     private string DataDir => Path.Combine(env.WebRootPath, "data", "raw");
 
-    /// <summary>Starts a refresh in the background. Returns false if one is already running or ran too recently.</summary>
-    public bool TryStart(string reason)
+    /// <summary>
+    /// Starts a refresh in the background. Returns false, with a reason, if one is already running or was tried too recently.
+    /// Every attempt counts toward the gap, and after failed sign-ins the gap grows (15, 30, 60 … minutes, up to 4 hours)
+    /// so the Refresh button can't keep retrying a bad login against RealWare and lock the account.
+    /// </summary>
+    public bool TryStart(string reason, out string? refusal)
     {
-        var minGap = TimeSpan.FromMinutes(config.GetValue("Refresh:MinMinutesBetweenRefreshes", 5));
-        var last = Status.LastRefresh;
-        if (reason == "button" && last is not null && DateTimeOffset.UtcNow - last < minGap) return false;
-        if (!_gate.Wait(0)) return false;
+        refusal = null;
+        DateTimeOffset? last; int failures;
+        lock (_lock) { last = _lastAttempt; failures = _signInFailures; }
+        if (reason == "button" && last is not null)
+        {
+            var wait = WaitAfterAttempt(failures) - (DateTimeOffset.UtcNow - last.Value);
+            if (wait > TimeSpan.Zero)
+            {
+                var minutes = (int)Math.Ceiling(wait.TotalMinutes);
+                refusal = failures > 0
+                    ? $"The last RealWare sign-in failed. To avoid locking the account, Refresh is paused for {minutes} more minute(s)."
+                    : $"A refresh was run in the last few minutes. Try again in {minutes} minute(s).";
+                return false;
+            }
+        }
+        if (!_gate.Wait(0)) { refusal = "A refresh is already running."; return false; }
         // Mark as running before returning, so the very next status check already reports it.
         Set(s => s with { Running = true, Step = "starting", LastError = null });
         _ = Task.Run(() => RunLockedAsync(reason));
         return true;
+    }
+
+    private TimeSpan WaitAfterAttempt(int signInFailures)
+    {
+        var minGap = TimeSpan.FromMinutes(config.GetValue("Refresh:MinMinutesBetweenRefreshes", 5));
+        if (signInFailures == 0) return minGap;
+        var backoff = TimeSpan.FromMinutes(config.GetValue("Refresh:SignInBackoffMinutes", 15) * Math.Pow(2, Math.Min(signInFailures - 1, 10)));
+        var cap = TimeSpan.FromMinutes(config.GetValue("Refresh:MaxSignInBackoffMinutes", 240));
+        return TimeSpan.FromTicks(Math.Max(minGap.Ticks, Math.Min(backoff.Ticks, cap.Ticks)));
     }
 
     /// <summary>Runs a refresh (waits if one is already in progress). Used by the weekly schedule.</summary>
@@ -46,13 +73,17 @@ public sealed class Refresher(IConfiguration config, IWebHostEnvironment env, IL
     private async Task RunLockedAsync(string reason)
     {
         var started = DateTimeOffset.UtcNow;
+        lock (_lock) _lastAttempt = started;
         Set(s => s with { Step = "signing in" });
         log.LogInformation("Refresh started ({Reason})", reason);
         try
         {
             var searches = LoadSearches(out var salesYears);
             using var http = CreateClient();
-            var token = await GetTokenAsync(http);
+            string token;
+            try { token = await GetTokenAsync(http); }
+            catch (SignInFailed) { lock (_lock) _signInFailures++; throw; }
+            lock (_lock) _signInFailures = 0;
             http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
             // Fetch everything first; only replace the saved files if every search succeeded.
@@ -89,8 +120,11 @@ public sealed class Refresher(IConfiguration config, IWebHostEnvironment env, IL
         }
         catch (Exception ex)
         {
+            // The full error (which can name the RealWare host and port) goes to the server log only;
+            // /api/status shows our own plain-language messages, or a generic one.
             log.LogError(ex, "Refresh failed; previous data kept");
-            Set(st => st with { LastError = ex.Message });
+            var shown = ex is RefreshProblem ? ex.Message : "Could not get data from RealWare. The previous data is still shown; details are in the server log.";
+            Set(st => st with { LastError = shown });
         }
         finally
         {
@@ -120,10 +154,19 @@ public sealed class Refresher(IConfiguration config, IWebHostEnvironment env, IL
         if (config.GetValue("Realware:IgnoreCertificateErrors", false))
             handler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
         var baseUrl = config["Realware:BaseUrl"];
-        if (string.IsNullOrWhiteSpace(baseUrl)) throw new InvalidOperationException("Realware:BaseUrl is not set in appsettings.");
+        if (string.IsNullOrWhiteSpace(baseUrl)) throw new RefreshProblem("Realware:BaseUrl is not set in the server settings.");
+        if (!Uri.TryCreate(baseUrl.TrimEnd('/') + "/", UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+            throw new RefreshProblem("Realware:BaseUrl is not a valid web address.");
+        // The RealWare password is sent at sign-in, so plain http:// is refused unless the server settings explicitly allow it.
+        if (uri.Scheme == Uri.UriSchemeHttp)
+        {
+            if (!config.GetValue("Realware:AllowInsecureHttp", false))
+                throw new RefreshProblem("Realware:BaseUrl must start with https:// so the RealWare password isn't sent unencrypted. (To allow http:// temporarily, set Realware:AllowInsecureHttp to true.)");
+            log.LogWarning("Realware:BaseUrl uses http://; the RealWare password is sent unencrypted (Realware:AllowInsecureHttp is on).");
+        }
         return new HttpClient(handler)
         {
-            BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/"),
+            BaseAddress = uri,
             Timeout = TimeSpan.FromMinutes(config.GetValue("Realware:TimeoutMinutes", 10)),
         };
     }
@@ -138,9 +181,9 @@ public sealed class Refresher(IConfiguration config, IWebHostEnvironment env, IL
         };
         using var res = await http.PostAsync("api/authentication/token", new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"));
         var text = await res.Content.ReadAsStringAsync();
-        if (!res.IsSuccessStatusCode) throw new InvalidOperationException($"RealWare sign-in failed (HTTP {(int)res.StatusCode}). Check Realware:Username / Password.");
+        if (!res.IsSuccessStatusCode) throw new SignInFailed($"RealWare sign-in failed (HTTP {(int)res.StatusCode}). Check Realware:Username / Password.");
         var token = JsonNode.Parse(text)?["AccessToken"]?.GetValue<string>();
-        if (string.IsNullOrEmpty(token)) throw new InvalidOperationException("RealWare sign-in returned no token.");
+        if (string.IsNullOrEmpty(token)) throw new SignInFailed("RealWare sign-in returned no token.");
         return token;
     }
 
@@ -150,12 +193,12 @@ public sealed class Refresher(IConfiguration config, IWebHostEnvironment env, IL
         var url = $"api/listbuilder/realware/{s.QueryId}?maxResults={max}&taxyear=0";
         using var res = await http.PostAsync(url, new StringContent("[]", Encoding.UTF8, "application/json"));
         var text = await res.Content.ReadAsStringAsync();
-        if (!res.IsSuccessStatusCode) throw new InvalidOperationException($"{s.Title} (query {s.QueryId}) failed: HTTP {(int)res.StatusCode}.");
+        if (!res.IsSuccessStatusCode) throw new RefreshProblem($"{s.Title} (query {s.QueryId}) failed: HTTP {(int)res.StatusCode}.");
         var node = JsonNode.Parse(text);
         // A list of row objects (also accepts the list wrapped in an object).
         var rows = node as JsonArray ?? (node as JsonObject)?.Select(p => p.Value).OfType<JsonArray>().FirstOrDefault()
-                   ?? throw new InvalidOperationException($"{s.Title}: unexpected response (not a list of rows).");
-        if (rows.Count >= max) throw new InvalidOperationException($"{s.Title}: returned {rows.Count} rows, the maxResults limit; results may be cut off. Raise Realware:MaxResults.");
+                   ?? throw new RefreshProblem($"{s.Title}: unexpected response (not a list of rows).");
+        if (rows.Count >= max) throw new RefreshProblem($"{s.Title}: returned {rows.Count} rows, the maxResults limit; results may be cut off. Raise Realware:MaxResults.");
         return rows;
     }
 
@@ -198,18 +241,18 @@ public sealed class Refresher(IConfiguration config, IWebHostEnvironment env, IL
     /// <summary>Refuses to replace good data with an empty or much smaller result (e.g. a broken search).</summary>
     private void CheckRowCount(Search s, int count)
     {
-        if (count == 0) throw new InvalidOperationException($"{s.Title} returned no rows.");
+        if (count == 0) throw new RefreshProblem($"{s.Title} returned no rows.");
         var path = Path.Combine(DataDir, s.Name + ".json");
         if (!File.Exists(path)) return;
         var previous = JsonNode.Parse(File.ReadAllText(path)) is JsonArray a ? a.Count : 0;
         var ratio = config.GetValue("Refresh:MinRowRatio", 0.5);
         if (previous > 0 && count < previous * ratio)
-            throw new InvalidOperationException($"{s.Title} returned {count} rows, down from {previous}. Not saved; check the search in ListBuilder.");
+            throw new RefreshProblem($"{s.Title} returned {count} rows, down from {previous}. Not saved; check the search in ListBuilder.");
     }
 
     private List<Search> LoadSearches(out int salesYears)
     {
-        var json = JsonNode.Parse(File.ReadAllText(Path.Combine(env.WebRootPath, "config", "searches.json")))!;
+        var json = JsonNode.Parse(File.ReadAllText(Path.Combine(env.ContentRootPath, "config", "searches.json")))!;
         salesYears = json["salesYearsToKeep"]?.GetValue<int>() ?? 10;
         return json["searches"]!.AsArray().Select(n => new Search(
             n!["name"]!.GetValue<string>(), n["queryId"]!.GetValue<long>(), n["title"]?.GetValue<string>() ?? n["name"]!.GetValue<string>(),
@@ -218,6 +261,12 @@ public sealed class Refresher(IConfiguration config, IWebHostEnvironment env, IL
 
     private sealed record Search(string Name, long QueryId, string Title, List<string> Keep, string? DateColumn);
 }
+
+/// <summary>A refresh failure with a message that is safe to show in the browser (no host names or raw errors).</summary>
+public class RefreshProblem(string message) : Exception(message);
+
+/// <summary>RealWare rejected the sign-in; repeated failures pause the Refresh button (see Refresher.TryStart).</summary>
+public sealed class SignInFailed(string message) : RefreshProblem(message);
 
 public sealed record RefreshStatus
 {

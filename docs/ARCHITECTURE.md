@@ -129,7 +129,7 @@ An ASP.NET Core minimal app with two source files.
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/status` | `{ running, step, lastRefresh, lastDurationSeconds, lastError }` |
-| `POST /api/refresh` | Starts a refresh. Returns 202, or 409 if one is running or ran in the last 5 minutes. |
+| `POST /api/refresh` | Starts a refresh. Returns 202, or 409 with a reason if one is running, was attempted in the last 5 minutes, or is paused after a failed sign-in. |
 
 **`Refresher.cs`** runs the refresh in these steps:
 
@@ -143,14 +143,19 @@ An ASP.NET Core minimal app with two source files.
    - none may shrink below 50% of its previous size.
 5. Write each file to a temporary name and swap it in, then write `meta.json` (time and row counts).
 
-A failed refresh never touches the existing data. The error appears in `/api/status` and the server logs.
+A failed refresh never touches the existing data. `/api/status` shows a plain-language message; the full error is in the server logs.
+
+**Refresh limits:** every attempt starts a 5-minute gap for the Refresh button. After a failed sign-in, the gap grows to 15 minutes, then doubles with each further failure, up to 4 hours. A successful sign-in resets it. The weekly schedule isn't affected.
 
 The weekly schedule (`WeeklySchedule`) runs Sunday at 2:00 AM by default, and once at startup if no data exists yet.
 
 **Security:**
 
 - The RealWare login is only in `appsettings.Production.json` or app-pool environment variables on the server.
-- Only `wwwroot/` is web-accessible.
+- Only `wwwroot/` is web-accessible. `config/searches.json` sits next to the program, outside it.
+- An `http://` RealWare address is refused unless `Realware:AllowInsecureHttp` is on.
+- Hover tips are built from text nodes only, and CSV cells that look like spreadsheet formulas are prefixed with `'`.
+- MapLibre GL JS ships in `assets/vendor/`; no scripts load from other sites.
 - The program never changes RealWare data.
 - The API address is never in this repository.
 
@@ -159,7 +164,7 @@ The weekly schedule (`WeeklySchedule`) runs Sunday at 2:00 AM by default, and on
 | Choice | Why |
 |---|---|
 | Plain HTML/JS/CSS, no build step | Nothing to compile on the front end; easy for IT to read and review. |
-| MapLibre GL JS 4.x | Open source, GPU-rendered vector map; handles ~17,500 parcels smoothly. |
+| MapLibre GL JS 4.7.1 (bundled in `assets/vendor/`) | Open source, GPU-rendered vector map; handles ~17,500 parcels smoothly. |
 | Esri basemaps (light/dark gray, satellite, topo) | No API key needed. |
 | ASP.NET Core on IIS | Fits a county Windows server; one small program, one settings file. |
 | Python + geopandas (geometry only) | Run occasionally on a workstation when parcel shapes change, not on the server. |

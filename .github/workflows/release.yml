@@ -14,9 +14,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Actions are pinned to exact commits so a changed tag can't alter the build.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: "10.0.x"
 
@@ -31,10 +32,14 @@ jobs:
           cp deploy/update.ps1 deploy/install.ps1 out/
 
       - name: Package
-        run: cd out && zip -r ../LandAttributeDashboard.zip .
+        run: |
+          cd out && zip -r ../LandAttributeDashboard.zip . && cd ..
+          cp deploy/install.ps1 install.ps1
+          sha256sum LandAttributeDashboard.zip install.ps1 > SHA256SUMS.txt
+          cat SHA256SUMS.txt
 
       - name: Create release
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" LandAttributeDashboard.zip deploy/install.ps1 --title "$GITHUB_REF_NAME" --notes "See CHANGELOG.md for what changed."
+        run: gh release create "$GITHUB_REF_NAME" LandAttributeDashboard.zip install.ps1 SHA256SUMS.txt --title "$GITHUB_REF_NAME" --notes "See CHANGELOG.md for what changed. SHA-256 checksums are in SHA256SUMS.txt."
