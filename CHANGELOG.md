@@ -2,7 +2,7 @@
 
 Each version is tagged on GitHub and has an install package under **Releases**. To install one on the county server: `update.ps1 -Version <version>`.
 
-## v1.2 (unreleased)
+## v1.2 (2026-10-15)
 
 Security fixes from the County IT code review (2026-10-13), a reorganized map sidebar, and new sales filters.
 
