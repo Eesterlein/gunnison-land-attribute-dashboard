@@ -254,3 +254,4 @@ table.coverage, table.issues, table.review { border-collapse: collapse; width: 1
   .panel-top { position: static; }
   .map-legend { max-width: 60%; bottom: 10px; font-size: 11.5px; }
 }
+.btn:disabled { opacity: .45; cursor: default; }

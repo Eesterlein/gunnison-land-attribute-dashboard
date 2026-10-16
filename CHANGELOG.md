@@ -24,7 +24,7 @@ Security fixes from the County IT code review (2026-10-13), a reorganized map si
 - **New order, as numbered steps:** 1 Area → 2 Account type → 3 Land attribute → 4 Sales → 5 Map display. Every existing feature is still there.
 - **Collapsible:** each step folds up and shows a one-line summary in its header; the « button hides the whole sidebar for a full-width map. The browser remembers the layout.
 - **Live count** at the top: accounts and parcels in the selected area and account types.
-- **Property area filter** (Gunnison, Mt Crested Butte, Marble, Pitkin, …) next to LEA and neighborhood, on the map and on Review & Stats. **Zoom to area** and **Whole county** buttons sit under the area filters. Searching for an area in the top search box now adds it to the filter.
+- **Property area filter** (Gunnison, Mt Crested Butte, Marble, Pitkin, …) next to LEA and neighborhood, on the map and on Review & Stats. Picking an area zooms the map there; **Back to area** returns to it after you've moved around, and **Whole county** clears the area filters and zooms out. Searching for an area in the top search box now adds it to the filter.
 - **Legend** moved onto the map.
 
 **Sales**

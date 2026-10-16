@@ -166,13 +166,13 @@
     const counts = new Map(); for (const a of A) for (const v of a.attrs[ci]) counts.set(v, (counts.get(v) || 0) + 1);
     return VALUES[ci].map((name, v) => [v, name, counts.get(v) || 0]);
   };
-  function multiSelect(el, { noun, items, set, onChange = () => { filtersChanged(); autoZoom(); }, zoom = true }) {
+  function multiSelect(el, { noun, items, set, onChange = () => { filtersChanged(); autoZoom(); } }) {
     if (!items || !items.length) { el.innerHTML = `<div class="ms-empty">No ${noun.toLowerCase()} data</div>`; return; }
     items = items.slice().sort((x, y) => x[1].localeCompare(y[1], undefined, { numeric: true }));
     const nameOf = new Map(items.map(([v, n]) => [v, n]));
     const label = () => !set.size ? `All ${noun}s` : set.size === 1 ? nameOf.get([...set][0]) ?? "" : `${set.size} ${noun}s selected`;
     el.innerHTML = `<button class="ms-btn" type="button" aria-haspopup="listbox"><span class="ms-label"></span><span aria-hidden="true">▾</span></button>
-      <div class="ms-pop" hidden><input type="search" placeholder="Filter ${noun}s…" class="ms-q"><div class="ms-actions"><button class="linkbtn ms-clear" type="button">Clear</button>${zoom ? `<button class="linkbtn ms-zoom" type="button">Zoom to selection</button>` : ""}</div><ul class="ms-list" role="listbox"></ul></div>`;
+      <div class="ms-pop" hidden><input type="search" placeholder="Filter ${noun}s…" class="ms-q"><div class="ms-actions"><button class="linkbtn ms-clear" type="button">Clear</button></div><ul class="ms-list" role="listbox"></ul></div>`;
     const btn = el.querySelector(".ms-btn"), pop = el.querySelector(".ms-pop"), q = el.querySelector(".ms-q"), ul = el.querySelector(".ms-list");
     const paint = () => {
       el.querySelector(".ms-label").textContent = label();
@@ -184,7 +184,6 @@
     q.oninput = paint;
     ul.onclick = (e) => { const li = e.target.closest("li[data-k]"); if (!li) return; const v = items[+li.dataset.k][0]; set.has(v) ? set.delete(v) : set.add(v); paint(); onChange(); };
     el.querySelector(".ms-clear").onclick = () => { set.clear(); paint(); onChange(); };
-    if (zoom) el.querySelector(".ms-zoom").onclick = () => { pop.hidden = true; location.hash = "#map"; setTimeout(zoomToArea, 30); };
     document.addEventListener("mousedown", (e) => { if (!el.contains(e.target)) pop.hidden = true; });
     el._paint = paint; paint();
   }
@@ -213,6 +212,7 @@
   function renderLiveCount() {
     const pass = A.filter(acctPass), parcels = new Set(pass.filter((a) => a.fp >= 0).map((a) => a.fp)).size;
     const where = areaFiltered() ? "in the selected area" : "whole county";
+    $("zoom-area").disabled = !areaFiltered();
     $("live-count").innerHTML = `<strong>${fmt(pass.length)}</strong> accounts · <strong>${fmt(parcels)}</strong> parcels <span class="muted">${where}</span>`;
     renderStepSums();
   }
@@ -310,7 +310,7 @@
     };
     const typeCounts = {}; for (const x of allSales) if (x.analysis) typeCounts[x.analysis] = (typeCounts[x.analysis] || 0) + 1;
     $("analysis-wrap").hidden = !Object.keys(typeCounts).length;
-    multiSelect($("analysis-ms"), { noun: "Analysis type", items: Object.entries(typeCounts).map(([n, c]) => [n, n, c]), set: S.saleTypes, onChange: salesChanged, zoom: false });
+    multiSelect($("analysis-ms"), { noun: "Analysis type", items: Object.entries(typeCounts).map(([n, c]) => [n, n, c]), set: S.saleTypes, onChange: salesChanged });
     renderPeriodNote();
 
     $("detail-close").onclick = closeDetail;
