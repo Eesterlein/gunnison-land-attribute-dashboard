@@ -4,7 +4,7 @@ Each version is tagged on GitHub and has an install package under **Releases**. 
 
 ## v1.2 (unreleased)
 
-Security fixes from the County IT code review (2026-10-13). No changes to what the dashboard shows.
+Security fixes from the County IT code review (2026-10-13), a reorganized map sidebar, and new sales filters.
 
 > **Before updating a server that reaches RealWare over `http://`:** this version refuses an `http://` RealWare address by default, so the RealWare password isn't sent unencrypted. Until RealWare has HTTPS, add `"AllowInsecureHttp": true` under `"Realware"` in `appsettings.Production.json`, or refreshes will fail. `update.ps1` prints a warning if this applies.
 
@@ -18,6 +18,21 @@ Security fixes from the County IT code review (2026-10-13). No changes to what t
 - **Installer (L5, L10):** checks the correct ASP.NET Core Module path, and never copies `wwwroot\data\raw` from a package.
 - **Search settings (L7):** `searches.json` moved from `wwwroot\config\` to `config\` next to the program, so it's never web-accessible. `update.ps1` removes the old copy.
 - **Releases (H1):** GitHub Actions are pinned to exact commits, and each release includes `SHA256SUMS.txt`.
+
+**Map sidebar**
+
+- **New order, as numbered steps:** 1 Area → 2 Account type → 3 Land attribute → 4 Sales → 5 Map display. Every existing feature is still there.
+- **Collapsible:** each step folds up and shows a one-line summary in its header; the « button hides the whole sidebar for a full-width map. The browser remembers the layout.
+- **Live count** at the top: accounts and parcels in the selected area and account types.
+- **Property area filter** (Gunnison, Mt Crested Butte, Marble, Pitkin, …) next to LEA and neighborhood, on the map and on Review & Stats. **Zoom to area** and **Whole county** buttons sit under the area filters. Searching for an area in the top search box now adds it to the filter.
+- **Legend** moved onto the map.
+
+**Sales**
+
+- **Qualified level:** each qualified sale shows **Q1**, **Q2** or **Q1 + Q2** in callouts and the parcel card; Q2 sales also show their reason (e.g. remodel after sale). Filter: Q1 + Q2 / Q1 only / Q2 only.
+- **Analysis type** filter (e.g. MH Affixed, MH Titled).
+- Sale dots, sale callouts, the parcel card and the "Download list" CSV all follow these filters. The CSV adds property area, qualified level, analysis type and Q2 reason.
+- **Data:** LAD - Sales (43636) now also returns `VALID 1 FLAG`, `VALID 2 FLAG` and `ANALYSIS TYPE`. Same query ID.
 
 ## v1.1 (2026-10-12)
 

@@ -28,65 +28,101 @@
 <!-- ============================ MAP PAGE ============================ -->
 <main id="page-map" class="page">
   <aside class="panel" id="map-panel">
-    <section>
-      <label class="lbl" for="cat">Land attribute</label>
-      <select id="cat"></select>
+    <div class="panel-top">
+      <div id="live-count" class="live-count" aria-live="polite"></div>
+      <button id="panel-collapse" class="icon-btn" title="Hide panel" aria-label="Hide panel">«</button>
+    </div>
+
+    <section class="step" data-step="area">
+      <button class="step-head" type="button" aria-expanded="true"><span class="step-n">1</span><span class="step-t">Area</span><span class="step-sum" id="sum-area"></span><span class="chev" aria-hidden="true">▾</span></button>
+      <div class="step-body">
+        <div class="sub-lbl">Property area</div>
+        <div id="area-ms" class="ms"></div>
+        <div class="sub-lbl">LEA</div>
+        <div id="lea-ms" class="ms"></div>
+        <div class="sub-lbl">Neighborhood</div>
+        <div id="nbhd-ms" class="ms"></div>
+        <div class="row gap step-actions"><button id="zoom-area" class="btn small" type="button">Zoom to area</button><button id="whole-county" class="btn small ghost" type="button">Whole county</button></div>
+      </div>
     </section>
-    <section class="values-section">
-      <div class="row between">
-        <label class="lbl" for="value-filter">Sub-attribute <span id="sel-count" class="muted"></span></label>
-        <div class="flip">
-          <button id="prev" title="Previous value (↑ or K)" aria-label="Previous value">▲</button>
-          <button id="next" title="Next value (↓ or J)" aria-label="Next value">▼</button>
+
+    <section class="step" data-step="type">
+      <button class="step-head" type="button" aria-expanded="true"><span class="step-n">2</span><span class="step-t">Account type</span><span class="step-sum" id="sum-type"></span><span class="chev" aria-hidden="true">▾</span></button>
+      <div class="step-body">
+        <div id="type-chips" class="chips"></div>
+        <div class="muted small">None selected = all account types</div>
+      </div>
+    </section>
+
+    <section class="step" data-step="attr">
+      <button class="step-head" type="button" aria-expanded="true"><span class="step-n">3</span><span class="step-t">Land attribute</span><span class="step-sum" id="sum-attr"></span><span class="chev" aria-hidden="true">▾</span></button>
+      <div class="step-body values-section">
+        <select id="cat" aria-label="Land attribute"></select>
+        <div class="row between">
+          <label class="sub-lbl" for="value-filter">Sub-attribute <span id="sel-count" class="muted"></span></label>
+          <div class="flip">
+            <button id="prev" title="Previous value (↑ or K)" aria-label="Previous value">▲</button>
+            <button id="next" title="Next value (↓ or J)" aria-label="Next value">▼</button>
+          </div>
+        </div>
+        <input id="value-filter" type="search" placeholder="Filter values…" autocomplete="off">
+        <ul id="values" class="values" role="listbox" aria-multiselectable="true" aria-label="Attribute values"></ul>
+        <div class="row between hint"><span>Click a value to show it · tick boxes to color up to 6</span></div>
+        <div class="row gap"><button id="color-all" class="btn small">Color all values</button><button id="clear-sel" class="btn small ghost">Clear</button></div>
+        <div class="summary" id="summary"></div>
+        <label class="check"><input type="checkbox" id="show-flags"> <span>Outline in <strong class="red">red</strong> the parcels whose value for this attribute doesn't match most of their neighbors, or has conflicting entries</span></label>
+      </div>
+    </section>
+
+    <section class="step" data-step="sales">
+      <button class="step-head" type="button" aria-expanded="true"><span class="step-n">4</span><span class="step-t">Sales</span><span class="step-sum" id="sum-sales"></span><span class="chev" aria-hidden="true">▾</span></button>
+      <div class="step-body">
+        <div class="sub-lbl">Appraisal period</div>
+        <select id="period" aria-label="Appraisal period"></select>
+        <select id="extend" aria-label="Extend period"></select>
+        <div id="period-note" class="muted small"></div>
+        <div id="q-level-wrap">
+          <div class="sub-lbl">Qualified level</div>
+          <div class="seg" id="q-level">
+            <button data-q="0" class="on" type="button">Q1 + Q2</button>
+            <button data-q="1" type="button">Q1 only</button>
+            <button data-q="2" type="button">Q2 only</button>
+          </div>
+        </div>
+        <div id="analysis-wrap">
+          <div class="sub-lbl">Analysis type</div>
+          <div id="analysis-ms" class="ms"></div>
+        </div>
+        <label class="check"><input type="checkbox" id="sold-mark"> <span><i class="sw-dot"></i> Mark parcels with a qualified sale in this period</span></label>
+        <div id="sold-note" class="muted small" hidden></div>
+        <label class="check"><input type="checkbox" id="lbl-sale"> Callout: qualified sale in this period (date, price, adjusted price, Q1/Q2)</label>
+      </div>
+    </section>
+
+    <section class="step" data-step="display">
+      <button class="step-head" type="button" aria-expanded="true"><span class="step-n">5</span><span class="step-t">Map display</span><span class="step-sum" id="sum-display"></span><span class="chev" aria-hidden="true">▾</span></button>
+      <div class="step-body">
+        <label class="check"><input type="checkbox" id="lbl-acct"> Callout: account number</label>
+        <div id="label-note" class="muted small" hidden>Zoom in to see callouts.</div>
+        <div class="sub-lbl">Basemap</div>
+        <div class="seg" id="basemap">
+          <button data-bm="light" class="on">Light</button>
+          <button data-bm="aerial">Satellite</button>
+          <button data-bm="topo">Topo</button>
         </div>
       </div>
-      <input id="value-filter" type="search" placeholder="Filter values…" autocomplete="off">
-      <ul id="values" class="values" role="listbox" aria-multiselectable="true" aria-label="Attribute values"></ul>
-      <div class="row between hint"><span>Click a value to show it · tick boxes to color up to 6</span></div>
-      <div class="row gap"><button id="color-all" class="btn small">Color all values</button><button id="clear-sel" class="btn small ghost">Clear</button></div>
     </section>
-    <section class="summary" id="summary"></section>
-    <section>
-      <label class="lbl">Filters</label>
-      <div class="sub-lbl">Account type</div>
-      <div id="type-chips" class="chips"></div>
-      <div class="sub-lbl">LEA</div>
-      <div id="lea-ms" class="ms"></div>
-      <div class="sub-lbl">Neighborhood</div>
-      <div id="nbhd-ms" class="ms"></div>
-      <div id="filter-note" class="muted small"></div>
-      <label class="check"><input type="checkbox" id="show-flags"> <span>Outline in <strong class="red">red</strong> the parcels whose value for this attribute doesn't match most of their neighbors, or has conflicting entries</span></label>
-    </section>
-    <section>
-      <label class="lbl">Sales &amp; labels</label>
-      <div class="sub-lbl">Appraisal period</div>
-      <select id="period"></select>
-      <select id="extend"></select>
-      <div id="period-note" class="muted small"></div>
-      <label class="check"><input type="checkbox" id="sold-mark"> <span><i class="sw-dot"></i> Mark parcels with a qualified sale in this period</span></label>
-      <div id="sold-note" class="muted small" hidden></div>
-      <label class="check"><input type="checkbox" id="lbl-acct"> Callout: account number</label>
-      <label class="check"><input type="checkbox" id="lbl-sale"> Callout: qualified sale in this period (date, price, adjusted price)</label>
-      <div id="label-note" class="muted small" hidden>Zoom in to see callouts.</div>
-    </section>
-    <section>
-      <label class="lbl">Basemap</label>
-      <div class="seg" id="basemap">
-        <button data-bm="light" class="on">Light</button>
-        <button data-bm="aerial">Satellite</button>
-        <button data-bm="topo">Topo</button>
-      </div>
-    </section>
-    <div class="legend" id="legend">
+  </aside>
+  <div class="map-wrap">
+    <div id="map"></div>
+    <button id="panel-expand" class="panel-expand" type="button" hidden title="Show panel">» Filters</button>
+    <div class="legend map-legend" id="legend">
       <div id="legend-values" class="legend"></div>
       <span><i class="sw sw-other"></i>Other value</span>
       <span><i class="sw sw-none"></i>No land data or filtered out</span>
       <span class="flag-legend" hidden><i class="sw sw-flag"></i>⚠ Doesn't match neighbors / conflicting entries</span>
       <span class="sold-legend" hidden><i class="sw-dot"></i>Qualified sale in appraisal period</span>
     </div>
-  </aside>
-  <div class="map-wrap">
-    <div id="map"></div>
     <div id="loading" class="loading">Loading parcels…</div>
     <div id="hover-tip" class="hover-tip" hidden></div>
     <div id="flash" class="flash" hidden></div>
@@ -102,6 +138,7 @@
   <div class="stats-inner">
     <div class="filter-row">
       <div><label class="lbl">Account type</label><div id="s-type-chips" class="chips"></div></div>
+      <div><label class="lbl">Property area</label><div id="s-area-ms" class="ms"></div></div>
       <div><label class="lbl">LEA</label><div id="s-lea-ms" class="ms"></div></div>
       <div><label class="lbl">Neighborhood</label><div id="s-nbhd-ms" class="ms"></div></div>
     </div>

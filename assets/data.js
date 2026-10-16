@@ -51,7 +51,8 @@
                     acres: ["GROSSACRES"], sf: ["GROSSSQUAREFEET"] },
     sales: { account: ["ACCOUNTNO", "ACCOUNT"], reception: ["RECEPTIONNO"], deed: ["DEEDDESCRIPTION"], date: ["SALEDATE"],
              price: ["SALEPRICE"], adj: ["ADJUSTEDSALEPRICE"], vacantImproved: ["VACANTORIMPROVEDATTIMEOFSALE"],
-             txn: ["TYPEOFTRANSACTION"], invalid: ["INVALIDSALEREASON"] },
+             txn: ["TYPEOFTRANSACTION"], invalid: ["INVALIDSALEREASON"],
+             valid1: ["VALID1FLAG", "VALID1"], valid2: ["VALID2FLAG", "VALID2"], analysis: ["ANALYSISTYPE", "SALEOM1"] },
     values: { account: ["ACCOUNTNO", "ACCOUNT"], land: ["LANDACTUAL"], imp: ["IMPSACTUAL", "IMPROVEMENTSACTUAL"], total: ["TOTALACTUAL"] },
   };
 
@@ -176,8 +177,10 @@
       const a = ix.has(str(r.account)) ? A[ix.get(str(r.account))] : null; if (!a) continue;
       if (!/QUALIFIED/i.test(str(r.txn))) continue;
       const d = parseDate(r.date); if (!d) continue;
+      // q: qualified level as bits (1 = Valid 1, 2 = Valid 2, 3 = both); 0 when the flags aren't in the data.
+      const q = (str(r.valid1) === "1" ? 1 : 0) | (str(r.valid2) === "1" ? 2 : 0);
       a.sales.push({ date: d, price: num(r.price), adj: num(r.adj), reception: str(r.reception), deed: str(r.deed),
-                     vacantImproved: str(r.vacantImproved) });
+                     vacantImproved: str(r.vacantImproved), q, reason: str(r.invalid), analysis: str(r.analysis) });
     }
     for (const a of A) a.sales.sort((x, y) => y.date - x.date);
 

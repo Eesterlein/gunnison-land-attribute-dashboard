@@ -84,7 +84,8 @@
   let M, A, GEO, CATS, CAT_IX, VALUES, fpAccts, LEA_CI, NBHD_CI, typesList, areasList;
   const S = {
     ci: 0, sel: new Map(), valueText: "",
-    types: new Set(), leas: new Set(), nbhds: new Set(),
+    types: new Set(), areas: new Set(), leas: new Set(), nbhds: new Set(),
+    saleQ: 0, saleTypes: new Set(),   // sales filters: qualified level (0 = Q1 + Q2, 1 = Q1, 2 = Q2) and analysis types
     showFlags: false, basemap: "light",
     labels: { acct: false, sale: false }, soldMark: false,
     period: { year: defaultPeriod(), extend: 0 },
@@ -101,9 +102,12 @@
     const start = new Date(p.start); start.setMonth(start.getMonth() - S.period.extend);
     return { start, end: p.end, year: p.year };
   };
-  const saleInPeriod = (a) => { const { start, end } = periodRange(); return a.sales.find((s) => s.date >= start && s.date <= end) || null; };
+  const saleOk = (s) => (!S.saleQ || (s.q & S.saleQ)) && (!S.saleTypes.size || S.saleTypes.has(s.analysis));
+  const saleInPeriod = (a) => { const { start, end } = periodRange(); return a.sales.find((s) => s.date >= start && s.date <= end && saleOk(s)) || null; };
+  const qLabel = (s) => (s.q === 3 ? "Q1 + Q2" : s.q === 2 ? "Q2" : s.q === 1 ? "Q1" : "");
   const anyIn = (a, ci, set) => ci == null || !set.size || a.attrs[ci].some((v) => set.has(v));
-  const acctPass = (a) => (!S.types.size || S.types.has(a.type)) && anyIn(a, LEA_CI, S.leas) && anyIn(a, NBHD_CI, S.nbhds);
+  const acctPass = (a) => (!S.types.size || S.types.has(a.type)) && (!S.areas.size || S.areas.has(a.area)) && anyIn(a, LEA_CI, S.leas) && anyIn(a, NBHD_CI, S.nbhds);
+  const areaFiltered = () => S.areas.size + S.leas.size + S.nbhds.size > 0;
   const valName = (ci, v) => (v < 0 ? SPECIAL[v] : VALUES[ci][v]);
   const keyName = (ci, key) => (key === "" ? "(blank)" : key.split("|").map((v) => VALUES[ci][+v]).join(" + "));
   const accountMatches = (a, ci, v) =>
@@ -156,32 +160,38 @@
   }
   addEventListener("hashchange", () => { if (!M) return; if (currentPage() === "map" && location.hash.includes("?")) { readHash(); renderValues(); applyHighlight(); } route(); });
 
-  // ------------------------------------------------------------------ multi-select dropdown (LEA / neighborhood filters)
-  function multiSelect(el, { noun, ci, set }) {
-    if (ci == null) { el.innerHTML = `<div class="ms-empty">No ${noun.toLowerCase()} data</div>`; return; }
+  // ------------------------------------------------------------------ multi-select dropdown (area / LEA / neighborhood / analysis type)
+  // items: [[value, name, count]]; ticking a box adds or removes the value in `set`.
+  const attrItems = (ci) => {
     const counts = new Map(); for (const a of A) for (const v of a.attrs[ci]) counts.set(v, (counts.get(v) || 0) + 1);
-    const items = VALUES[ci].map((name, v) => [v, name, counts.get(v) || 0]).sort((x, y) => x[1].localeCompare(y[1], undefined, { numeric: true }));
-    const label = () => !set.size ? `All ${noun}s` : set.size === 1 ? VALUES[ci][[...set][0]] : `${set.size} ${noun}s selected`;
+    return VALUES[ci].map((name, v) => [v, name, counts.get(v) || 0]);
+  };
+  function multiSelect(el, { noun, items, set, onChange = () => { filtersChanged(); autoZoom(); }, zoom = true }) {
+    if (!items || !items.length) { el.innerHTML = `<div class="ms-empty">No ${noun.toLowerCase()} data</div>`; return; }
+    items = items.slice().sort((x, y) => x[1].localeCompare(y[1], undefined, { numeric: true }));
+    const nameOf = new Map(items.map(([v, n]) => [v, n]));
+    const label = () => !set.size ? `All ${noun}s` : set.size === 1 ? nameOf.get([...set][0]) ?? "" : `${set.size} ${noun}s selected`;
     el.innerHTML = `<button class="ms-btn" type="button" aria-haspopup="listbox"><span class="ms-label"></span><span aria-hidden="true">▾</span></button>
-      <div class="ms-pop" hidden><input type="search" placeholder="Filter ${noun}s…" class="ms-q"><div class="ms-actions"><button class="linkbtn ms-clear" type="button">Clear</button><button class="linkbtn ms-zoom" type="button">Zoom to selection</button></div><ul class="ms-list" role="listbox"></ul></div>`;
+      <div class="ms-pop" hidden><input type="search" placeholder="Filter ${noun}s…" class="ms-q"><div class="ms-actions"><button class="linkbtn ms-clear" type="button">Clear</button>${zoom ? `<button class="linkbtn ms-zoom" type="button">Zoom to selection</button>` : ""}</div><ul class="ms-list" role="listbox"></ul></div>`;
     const btn = el.querySelector(".ms-btn"), pop = el.querySelector(".ms-pop"), q = el.querySelector(".ms-q"), ul = el.querySelector(".ms-list");
     const paint = () => {
       el.querySelector(".ms-label").textContent = label();
       const t = q.value.trim().toLowerCase();
-      ul.innerHTML = items.filter(([, n]) => !t || n.toLowerCase().includes(t)).slice(0, 400).map(([v, n, c]) =>
-        `<li data-v="${v}" role="option" aria-selected="${set.has(v)}"><input type="checkbox" tabindex="-1" ${set.has(v) ? "checked" : ""}><span class="nm">${esc(n)}</span><span class="n">${fmt(c)}</span></li>`).join("");
+      ul.innerHTML = items.map((it, k) => [it, k]).filter(([[, n]]) => !t || n.toLowerCase().includes(t)).slice(0, 400).map(([[v, n, c], k]) =>
+        `<li data-k="${k}" role="option" aria-selected="${set.has(v)}"><input type="checkbox" tabindex="-1" ${set.has(v) ? "checked" : ""}><span class="nm">${esc(n)}</span><span class="n">${fmt(c)}</span></li>`).join("");
     };
     btn.onclick = () => { pop.hidden = !pop.hidden; if (!pop.hidden) { paint(); q.focus(); } };
     q.oninput = paint;
-    ul.onclick = (e) => { const li = e.target.closest("li[data-v]"); if (!li) return; const v = +li.dataset.v; set.has(v) ? set.delete(v) : set.add(v); paint(); filtersChanged(); autoZoom(); };
-    el.querySelector(".ms-clear").onclick = () => { set.clear(); paint(); filtersChanged(); };
-    el.querySelector(".ms-zoom").onclick = () => { pop.hidden = true; location.hash = "#map"; setTimeout(() => zoomToAccounts(A.filter(acctPass)), 30); };
+    ul.onclick = (e) => { const li = e.target.closest("li[data-k]"); if (!li) return; const v = items[+li.dataset.k][0]; set.has(v) ? set.delete(v) : set.add(v); paint(); onChange(); };
+    el.querySelector(".ms-clear").onclick = () => { set.clear(); paint(); onChange(); };
+    if (zoom) el.querySelector(".ms-zoom").onclick = () => { pop.hidden = true; location.hash = "#map"; setTimeout(zoomToArea, 30); };
     document.addEventListener("mousedown", (e) => { if (!el.contains(e.target)) pop.hidden = true; });
     el._paint = paint; paint();
   }
 
-  // Zoom the map to whatever the LEA / neighborhood filters select (debounced while ticking several).
-  const autoZoom = debounce(() => { if (currentPage() === "map" && (S.leas.size || S.nbhds.size)) zoomToAccounts(A.filter(acctPass)); }, 450);
+  // Zoom the map to whatever the area filters select (debounced while ticking several).
+  const autoZoom = debounce(() => { if (currentPage() === "map" && areaFiltered()) zoomToArea(); }, 450);
+  function zoomToArea() { if (!map) return; areaFiltered() ? zoomToAccounts(A.filter(acctPass)) : map.fitBounds(COUNTY_BOUNDS, { padding: 20 }); }
 
   // ------------------------------------------------------------------ controls
   function catOptions(sel, withAll) {
@@ -194,18 +204,61 @@
   }
   function filtersChanged() {
     renderChips($("type-chips")); renderChips($("s-type-chips"));
-    for (const id of ["lea-ms", "nbhd-ms", "s-lea-ms", "s-nbhd-ms"]) $(id)._paint?.();
-    renderFilterNote();
+    for (const id of ["area-ms", "lea-ms", "nbhd-ms", "s-area-ms", "s-lea-ms", "s-nbhd-ms"]) $(id)._paint?.();
+    renderLiveCount();
     if (currentPage() === "stats") renderStats();
     renderValues(); applyHighlight();
   }
-  function renderFilterNote() {
-    const n = S.types.size + S.leas.size + S.nbhds.size;
-    $("filter-note").textContent = n ? `${fmt(A.filter(acctPass).length)} accounts match the filters` : "";
+  // Live count at the top of the panel: accounts and parcels in the chosen area and account types.
+  function renderLiveCount() {
+    const pass = A.filter(acctPass), parcels = new Set(pass.filter((a) => a.fp >= 0).map((a) => a.fp)).size;
+    const where = areaFiltered() ? "in the selected area" : "whole county";
+    $("live-count").innerHTML = `<strong>${fmt(pass.length)}</strong> accounts · <strong>${fmt(parcels)}</strong> parcels <span class="muted">${where}</span>`;
+    renderStepSums();
+  }
+  // One-line summary of each step, shown in its header (useful when the step is collapsed).
+  function renderStepSums() {
+    const names = (set, f) => { const l = [...set].map(f); return l.length <= 2 ? l.join(", ") : `${l[0]} +${l.length - 1}`; };
+    const area = [S.areas.size && names(S.areas, titleish), S.leas.size && `${S.leas.size} LEA${S.leas.size > 1 ? "s" : ""}`,
+                  S.nbhds.size && `${S.nbhds.size} nbhd${S.nbhds.size > 1 ? "s" : ""}`].filter(Boolean).join(" · ");
+    $("sum-area").textContent = area || "Whole county";
+    $("sum-type").textContent = S.types.size ? names(S.types, (t) => t) : "All";
+    $("sum-attr").textContent = CATS[S.ci]?.label || "";
+    const sales = [String(periodRange().year), S.saleQ ? `Q${S.saleQ} only` : "", S.saleTypes.size ? `${S.saleTypes.size} type${S.saleTypes.size > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ");
+    $("sum-sales").textContent = sales;
+    $("sum-display").textContent = { light: "Light", aerial: "Satellite", topo: "Topo" }[S.basemap] || "";
+  }
+  const titleish = (s) => s.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase());
+  function salesChanged() {
+    renderPeriodNote(); renderStepSums(); updateLabels(); updateSold();
+    if (selFp >= 0 && !$("detail").hidden) openDetail(selFp, false, true);
+  }
+
+  // Collapsible steps and panel; the open/closed state is remembered in this browser only.
+  const PREF_KEY = "lad.panel";
+  const prefs = (() => { try { return JSON.parse(localStorage.getItem(PREF_KEY)) || {}; } catch { return {}; } })();
+  const savePrefs = () => { try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch { /* storage unavailable */ } };
+  function initPanel() {
+    document.querySelectorAll(".step").forEach((sec) => {
+      const head = sec.querySelector(".step-head"), key = sec.dataset.step;
+      const set = (open) => { sec.classList.toggle("closed", !open); head.setAttribute("aria-expanded", open); };
+      set(!(prefs.closed || []).includes(key));
+      head.onclick = () => {
+        const open = sec.classList.contains("closed"); set(open);
+        prefs.closed = [...document.querySelectorAll(".step.closed")].map((x) => x.dataset.step); savePrefs();
+      };
+    });
+    const collapse = (hide) => {
+      $("page-map").classList.toggle("panel-hidden", hide); $("panel-expand").hidden = !hide;
+      prefs.hidden = hide; savePrefs(); if (map) setTimeout(() => map.resize(), 0);
+    };
+    $("panel-collapse").onclick = () => collapse(true);
+    $("panel-expand").onclick = () => collapse(false);
+    if (prefs.hidden) collapse(true);
   }
   function initControls() {
     catOptions($("cat")); $("cat").value = S.ci;
-    $("cat").onchange = () => { S.ci = +$("cat").value; S.sel = new Map([[0, 0]]); S.valueText = ""; $("value-filter").value = ""; renderValues(); applyHighlight(); writeHash(); };
+    $("cat").onchange = () => { S.ci = +$("cat").value; renderStepSums(); S.sel = new Map([[0, 0]]); S.valueText = ""; $("value-filter").value = ""; renderValues(); applyHighlight(); writeHash(); };
     $("value-filter").oninput = () => { S.valueText = $("value-filter").value.trim().toLowerCase(); renderValues(); };
     $("values").onclick = (e) => {
       const li = e.target.closest("li[data-v]"); if (!li) return;
@@ -228,12 +281,17 @@
       el.onclick = (e) => { const b = e.target.closest(".chip"); if (!b) return; const t = b.dataset.t; S.types.has(t) ? S.types.delete(t) : S.types.add(t); filtersChanged(); };
     }
     renderChips($("type-chips")); renderChips($("s-type-chips"));
-    multiSelect($("lea-ms"), { noun: "LEA", ci: LEA_CI, set: S.leas });
-    multiSelect($("nbhd-ms"), { noun: "Neighborhood", ci: NBHD_CI, set: S.nbhds });
-    multiSelect($("s-lea-ms"), { noun: "LEA", ci: LEA_CI, set: S.leas });
-    multiSelect($("s-nbhd-ms"), { noun: "Neighborhood", ci: NBHD_CI, set: S.nbhds });
+    const areaCounts = {}; for (const a of A) if (a.area) areaCounts[a.area] = (areaCounts[a.area] || 0) + 1;
+    const areaItems = Object.entries(areaCounts).map(([n, c]) => [n, n, c]);
+    for (const [id, noun, items, set] of [["area-ms", "Property area", areaItems, S.areas], ["lea-ms", "LEA", LEA_CI != null && attrItems(LEA_CI), S.leas],
+                                          ["nbhd-ms", "Neighborhood", NBHD_CI != null && attrItems(NBHD_CI), S.nbhds]]) {
+      multiSelect($(id), { noun, items, set });
+      multiSelect($("s-" + id), { noun, items, set });
+    }
+    $("zoom-area").onclick = zoomToArea;
+    $("whole-county").onclick = () => { S.areas.clear(); S.leas.clear(); S.nbhds.clear(); filtersChanged(); zoomToArea(); };
     $("show-flags").onchange = () => { S.showFlags = $("show-flags").checked; document.querySelector(".flag-legend").hidden = !S.showFlags; applyFlags(); };
-    $("basemap").onclick = (e) => { const b = e.target.closest("button"); if (b) setBasemap(b.dataset.bm); };
+    $("basemap").onclick = (e) => { const b = e.target.closest("button"); if (b) { setBasemap(b.dataset.bm); renderStepSums(); } };
 
     // labels + appraisal period
     $("sold-mark").onchange = () => { S.soldMark = $("sold-mark").checked; document.querySelector(".sold-legend").hidden = !S.soldMark; updateSold(); };
@@ -242,8 +300,17 @@
     $("period").innerHTML = PERIODS.map((p) => `<option value="${p.year}">${p.year} reappraisal: ${mdy(p.start)} – ${mdy(p.end)}${p.inProgress ? " (in progress)" : ""}</option>`).join("");
     $("period").value = S.period.year;
     $("extend").innerHTML = [0, 6, 12, 18, 24, 36].map((m) => `<option value="${m}">${m ? `Extend back ${m} months` : "No extension (24 months)"}</option>`).join("");
-    const periodChanged = () => { S.period = { year: +$("period").value, extend: +$("extend").value }; renderPeriodNote(); updateLabels(); updateSold(); if (selFp >= 0 && !$("detail").hidden) openDetail(selFp, false, true); };
-    $("period").onchange = $("extend").onchange = periodChanged;
+    $("period").onchange = $("extend").onchange = () => { S.period = { year: +$("period").value, extend: +$("extend").value }; salesChanged(); };
+    // Sales filters. Each control only appears when the data has that column (added to LAD - Sales in v1.2).
+    const allSales = A.flatMap((a) => a.sales);
+    $("q-level-wrap").hidden = !allSales.some((x) => x.q);
+    $("q-level").onclick = (e) => {
+      const b = e.target.closest("button[data-q]"); if (!b) return;
+      S.saleQ = +b.dataset.q; $("q-level").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); salesChanged();
+    };
+    const typeCounts = {}; for (const x of allSales) if (x.analysis) typeCounts[x.analysis] = (typeCounts[x.analysis] || 0) + 1;
+    $("analysis-wrap").hidden = !Object.keys(typeCounts).length;
+    multiSelect($("analysis-ms"), { noun: "Analysis type", items: Object.entries(typeCounts).map(([n, c]) => [n, n, c]), set: S.saleTypes, onChange: salesChanged, zoom: false });
     renderPeriodNote();
 
     $("detail-close").onclick = closeDetail;
@@ -282,11 +349,13 @@
     const tip = $("tip");
     document.addEventListener("mouseover", (e) => { const el = e.target.closest("[data-tip]"); if (!el) { tip.hidden = true; return; } showTip(tip, el.dataset.tipB, el.dataset.tip); tip.hidden = false; });
     document.addEventListener("mousemove", (e) => { if (!tip.hidden) { tip.style.left = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8) + "px"; tip.style.top = (e.clientY + 16) + "px"; } });
-    renderValues(); renderFilterNote();
+    initPanel();
+    renderValues(); renderLiveCount();
   }
   function renderPeriodNote() {
     const { start, end } = periodRange();
-    $("period-note").textContent = `Qualified sales ${mdy(start)} – ${mdy(end)}`;
+    const which = [S.saleQ ? `Q${S.saleQ}` : "", S.saleTypes.size ? "selected analysis types" : ""].filter(Boolean).join(", ");
+    $("period-note").textContent = `Qualified sales ${mdy(start)} – ${mdy(end)}${which ? ` (${which})` : ""}`;
   }
   function setReview(issue, ci) {
     const m1 = { conflict: "", improved: "improved_no_utility" };
@@ -310,6 +379,7 @@
   const slotColor = (slot) => SLOTS[mode()][slot];
   let visibleVals = [];
   function renderValues() {
+    renderStepSums();
     const ci = S.ci; const { counts, noVal, noLand, noLandOk } = valueCounts(ci);
     const items = VALUES[ci].map((name, v) => [v, name, counts.get(v) || 0]).filter((x) => x[2] > 0 || S.sel.has(x[0])).sort((x, y) => y[2] - x[2]);
     const specials = [[NO_VALUE, SPECIAL[NO_VALUE], noVal], [NO_LAND, SPECIAL[NO_LAND], noLand], [NO_LAND_OK, SPECIAL[NO_LAND_OK], noLandOk]];
@@ -485,10 +555,11 @@
     $("dl-hl").onclick = () => {
       const rows = A.filter((a) => acctPass(a) && sel.some(([v]) => accountMatches(a, ci, v))).map((a) => {
         const s = saleInPeriod(a);
-        return [a.account, a.parcel, a.type, a.address, a.subdivision, a.hasLand ? a.attrs[ci].map((x) => VALUES[ci][x]).join("; ") : "",
-                s ? mdy(s.date) : "", s ? s.price : "", s ? s.adj : ""];
+        return [a.account, a.parcel, a.type, a.address, a.area, a.subdivision, a.hasLand ? a.attrs[ci].map((x) => VALUES[ci][x]).join("; ") : "",
+                s ? mdy(s.date) : "", s ? s.price : "", s ? s.adj : "", s ? qLabel(s) : "", s ? s.analysis : "", s && s.q & 2 ? s.reason : ""];
       });
-      downloadCSV(`${CATS[ci].key.replace(/\W+/g, "_")}.csv`, ["account", "parcel", "account_type", "address", "subdivision", CATS[ci].label, "qualified_sale_date", "sale_price", "adjusted_sale_price"], rows);
+      downloadCSV(`${CATS[ci].key.replace(/\W+/g, "_")}.csv`, ["account", "parcel", "account_type", "address", "property_area", "subdivision", CATS[ci].label,
+        "qualified_sale_date", "sale_price", "adjusted_sale_price", "qualified_level", "analysis_type", "q2_reason"], rows);
     };
     applyFlags();
     updateLabels(); updateSold();
@@ -520,7 +591,7 @@
         const lines = [];
         if (S.labels.acct) lines.push(A[bestA].account + (accts.length > 1 ? ` +${accts.length - 1}` : ""));
         if (S.labels.sale && best) {
-          lines.push(`${mdy(best.date)} · ${money(best.price)}`);
+          lines.push(`${mdy(best.date)} · ${money(best.price)}${best.q ? " · " + qLabel(best) : ""}`);
           if (best.adj != null && best.adj !== best.price) lines.push(`Adj ${money(best.adj)}`);
         }
         if (lines.length) features.push({ type: "Feature", geometry: { type: "Point", coordinates: pt }, properties: { t: lines.join("\n") } });
@@ -592,7 +663,8 @@
   }
   function saleHTML(a) {
     const s = saleInPeriod(a), last = a.sales[0], { year } = periodRange();
-    const line = (x) => `${mdy(x.date)} · ${money(x.price)}${x.adj != null && x.adj !== x.price ? ` (adjusted ${money(x.adj)})` : ""}${x.vacantImproved ? ` · ${esc(x.vacantImproved.toLowerCase())}` : ""}`;
+    const line = (x) => `${x.q ? `<span class="qtag q${x.q}">${qLabel(x)}</span> ` : ""}${mdy(x.date)} · ${money(x.price)}${x.adj != null && x.adj !== x.price ? ` (adjusted ${money(x.adj)})` : ""}${x.vacantImproved ? ` · ${esc(x.vacantImproved.toLowerCase())}` : ""}` +
+      (x.analysis || (x.q & 2 && x.reason) ? `<br><span class="muted">${[x.analysis && esc(x.analysis), x.q & 2 && x.reason && esc(x.reason.toLowerCase())].filter(Boolean).join(" · ")}</span>` : "");
     let h = `<div class="sale"><span class="k">Qualified sale, ${year} period</span>${s ? line(s) : `<span class="empty">none</span>`}</div>`;
     if (last && last !== s) h += `<div class="sale"><span class="k">Most recent qualified sale</span>${line(last)}</div>`;
     return h;
@@ -881,7 +953,7 @@ Click to view on map" style="cursor:pointer">
     A.forEach((a, i) => { if (a.subdivision && a.fp >= 0) (subs.get(a.subdivision) || subs.set(a.subdivision, []).get(a.subdivision)).push(i); });
     for (const [s, ids] of subs) index.push({ kind: "Subdivision", label: s, sub: `${ids.length} accounts`, text: s.toLowerCase(), ids });
     for (const [kind, ci] of [["LEA", LEA_CI], ["Neighborhood", NBHD_CI]]) if (ci != null) VALUES[ci].forEach((name, v) => index.push({ kind, label: name, sub: "add to filter", text: name.toLowerCase(), ci, v }));
-    for (const ar of areasList) index.push({ kind: "Area", label: ar, sub: "", text: ar.toLowerCase(), area: ar });
+    for (const ar of areasList) index.push({ kind: "Area", label: ar, sub: "add to area filter", text: ar.toLowerCase(), area: ar });
   }
   function initSearch() {
     const inp = $("search"), ul = $("search-results"); let results = [], on = 0;
@@ -910,7 +982,7 @@ Click to view on map" style="cursor:pointer">
         if (e.kind === "Account") focusAccount(e.i);
         else if (e.kind === "Subdivision") zoomToAccounts(e.ids.map((i) => A[i]));
         else if (e.kind === "LEA" || e.kind === "Neighborhood") { (e.kind === "LEA" ? S.leas : S.nbhds).add(e.v); filtersChanged(); zoomToAccounts(A.filter(acctPass)); }
-        else zoomToAccounts(A.filter((a) => a.area === e.area));
+        else { S.areas.add(e.area); filtersChanged(); zoomToArea(); }
       }, 30);
     };
     inp.addEventListener("input", debounce(run, 90));
