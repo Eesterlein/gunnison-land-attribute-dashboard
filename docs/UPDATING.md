@@ -38,7 +38,7 @@ C:\inetpub\LandAttributeDashboard\update.ps1
 The script:
 1. downloads the latest version from GitHub;
 2. stops the dashboard's app pool;
-3. copies the new program and website files into the site folder, keeping the settings file and data;
+3. copies the new program and website files into the site folder, keeping the settings file and data. It also keeps the server's own `web.config` and `appsettings.json` (so IIS rules, headers, logging and `AllowedHosts` survive). If this version's copy of either differs, it's saved alongside as `web.config.new` / `appsettings.json.new` for comparison;
 4. starts the app pool again and prints the installed version. Add `-StatusUrl http://<site>/api/status` to also print the refresh status.
 
 To install a **specific version**, or **roll back** to one, name it:

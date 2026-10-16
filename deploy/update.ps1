@@ -8,6 +8,8 @@
 
   Never touched: appsettings.Production.json (RealWare connection + login) and wwwroot\data\raw\
   (the saved RealWare data). The dashboard comes back already connected.
+  Kept if already present: web.config and appsettings.json, so the server's own changes survive.
+  If this version's copy differs, it is saved alongside as web.config.new / appsettings.json.new.
 
 .EXAMPLE
   .\update.ps1                      # latest release
@@ -23,6 +25,21 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# web.config and appsettings.json may hold the server's own changes (IIS rules, headers, logging,
+# AllowedHosts). If the site already has them, keep them; if the package's copy differs, save it
+# next to the server's copy as <name>.new for comparison instead of overwriting.
+function Keep-ServerFiles($pkg, $site) {
+    foreach ($f in "web.config", "appsettings.json") {
+        $new = Join-Path $pkg $f; $cur = Join-Path $site $f
+        if (-not (Test-Path $new) -or -not (Test-Path $cur)) { continue }
+        if ((Get-FileHash $new).Hash -ne (Get-FileHash $cur).Hash) {
+            Copy-Item $new "$cur.new" -Force
+            Write-Host "   Kept the server's $f. This version's copy is saved as $f.new if you want to compare." -ForegroundColor Yellow
+        }
+        Remove-Item $new
+    }
+}
+
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 Import-Module WebAdministration
 
@@ -42,6 +59,7 @@ try {
     # Belt and braces: never overwrite server-specific settings or saved data.
     Remove-Item "$work\pkg\appsettings.Production.json" -ErrorAction SilentlyContinue
     if (Test-Path "$work\pkg\wwwroot\data\raw") { Remove-Item "$work\pkg\wwwroot\data\raw" -Recurse -Force }
+    Keep-ServerFiles "$work\pkg" $SiteDir
 
     Write-Host "2/4 Stopping app pool '$AppPool'"
     if ((Get-WebAppPoolState -Name $AppPool).Value -ne "Stopped") { Stop-WebAppPool -Name $AppPool }

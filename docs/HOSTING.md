@@ -144,7 +144,7 @@ Then restrict this file so only Administrators and `IIS AppPool\LandAttributeDas
 
 *Alternative:* the same values can be set as environment variables on the app pool instead of in a file: `Realware__BaseUrl`, `Realware__Username`, `Realware__Password` (two underscores).
 
-All other settings have working defaults in `appsettings.json`:
+All other settings have working defaults in `appsettings.json`. Any of them can be overridden in `appsettings.Production.json`, which is the best place for server-specific changes. Updates keep the server's existing `appsettings.json` and `web.config` too, and save the new version's copies as `.new` files when they differ.
 
 | Setting | Default | Meaning |
 |---|---|---|

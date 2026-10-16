@@ -33,6 +33,21 @@ param(
 $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
+# web.config and appsettings.json may hold the server's own changes (IIS rules, headers, logging,
+# AllowedHosts). If the site already has them, keep them; if the package's copy differs, save it
+# next to the server's copy as <name>.new for comparison instead of overwriting.
+function Keep-ServerFiles($pkg, $site) {
+    foreach ($f in "web.config", "appsettings.json") {
+        $new = Join-Path $pkg $f; $cur = Join-Path $site $f
+        if (-not (Test-Path $new) -or -not (Test-Path $cur)) { continue }
+        if ((Get-FileHash $new).Hash -ne (Get-FileHash $cur).Hash) {
+            Copy-Item $new "$cur.new" -Force
+            Write-Host "   Kept the server's $f. This version's copy is saved as $f.new if you want to compare." -ForegroundColor Yellow
+        }
+        Remove-Item $new
+    }
+}
+
 function Step($n, $text) { Write-Host ""; Write-Host "[$n/6] $text" -ForegroundColor Cyan }
 
 # ---------------------------------------------------------------- 1. prerequisites
@@ -69,6 +84,7 @@ try {
     Remove-Item "$work\pkg\appsettings.Production.json" -ErrorAction SilentlyContinue
     if (Test-Path "$work\pkg\wwwroot\data\raw") { Remove-Item "$work\pkg\wwwroot\data\raw" -Recurse -Force }
     New-Item -ItemType Directory -Path $SiteDir -Force | Out-Null
+    Keep-ServerFiles "$work\pkg" $SiteDir
     if (Test-Path "IIS:\AppPools\$AppPool") {
         if ((Get-WebAppPoolState -Name $AppPool).Value -ne "Stopped") { Stop-WebAppPool -Name $AppPool; Start-Sleep -Seconds 5 }
     }

@@ -34,12 +34,12 @@ jobs:
       - name: Package
         run: |
           cd out && zip -r ../LandAttributeDashboard.zip . && cd ..
-          cp deploy/install.ps1 install.ps1
-          sha256sum LandAttributeDashboard.zip install.ps1 > SHA256SUMS.txt
+          cp deploy/install.ps1 deploy/update.ps1 .
+          sha256sum LandAttributeDashboard.zip install.ps1 update.ps1 > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: Create release
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" LandAttributeDashboard.zip install.ps1 SHA256SUMS.txt --title "$GITHUB_REF_NAME" --notes "See CHANGELOG.md for what changed. SHA-256 checksums are in SHA256SUMS.txt."
+        run: gh release create "$GITHUB_REF_NAME" LandAttributeDashboard.zip install.ps1 update.ps1 SHA256SUMS.txt --title "$GITHUB_REF_NAME" --notes "See CHANGELOG.md for what changed. SHA-256 checksums are in SHA256SUMS.txt."

@@ -16,6 +16,7 @@ Security fixes from the County IT code review (2026-10-13), a reorganized map si
 - **CSV export (L2):** cells that start with `=`, `+`, `-` or `@` get a leading `'` so Excel can't run them as formulas.
 - **Host names (L4):** `install.ps1 -HostName <name>` also sets `AllowedHosts` to that name.
 - **Installer (L5, L10):** checks the correct ASP.NET Core Module path, and never copies `wwwroot\data\raw` from a package.
+- **Updates keep server customizations:** `update.ps1` and `install.ps1` no longer overwrite an existing `web.config` or `appsettings.json`, so IIS rules, security headers, logging and `AllowedHosts` survive updates. If a new version's copy differs, it's saved as `web.config.new` / `appsettings.json.new`. `update.ps1` is also attached to each release. **For this update from v1.1:** run the `update.ps1` downloaded from the v1.2 release page, because the copy already in the site folder is the old one that overwrites both files.
 - **Search settings (L7):** `searches.json` moved from `wwwroot\config\` to `config\` next to the program, so it's never web-accessible. `update.ps1` removes the old copy.
 - **Releases (H1):** GitHub Actions are pinned to exact commits, and each release includes `SHA256SUMS.txt`.
 
