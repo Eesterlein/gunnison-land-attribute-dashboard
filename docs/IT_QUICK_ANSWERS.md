@@ -14,13 +14,15 @@ It is a map and review tool for appraisers. It shows every parcel in the county 
 
 | Data | Fields |
 |---|---|
-| Account | Account number, account type, parcel number, property type, property address, property area, economic area, subdivision, condo name, neighborhood |
+| Account | Account number, account type, parcel number, property type, property address, property area, economic area, subdivision, condo name, neighborhood, primary owner name (from v1.3; private owners excluded) |
 | Land | Land attribute type and sub-type, LEA, gross acres / square feet |
 | Sales (last 10 years) | Reception number, deed description, sale date, sale price, adjusted sale price, vacant/improved at sale, type of transaction, invalid-sale reason |
 | Values | Land, improvement and total actual value |
 | Map | Parcel shapes from the County tax-parcel GIS layer, with account and parcel numbers |
 
-**Not stored:** owner names, mailing addresses, grantor/grantee, or any other column not listed in `config/searches.json`. The server drops them before saving.
+**Not stored:** owner mailing addresses, grantor/grantee, or any other column not listed in `config/searches.json`. The server drops them before saving.
+
+**Imported lists (from v1.3):** an appraiser can load their own Excel/CSV list of account or parcel numbers to outline on the map. The file is read inside their browser only. It's never uploaded to the server or saved anywhere, and it's gone when the page is closed or reloaded.
 
 ### Where does the data come from?
 - **Property data:** five saved RealWare ListBuilder searches, run through the RealWare API by the program on the county server. They run once a week (Sunday 2 AM by default) and when someone clicks Refresh.

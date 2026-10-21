@@ -67,7 +67,7 @@ On page load the browser reads the five search outputs plus `geo_index.json` and
 - **Land attributes:** each `Attribute Type` becomes a category and each `Attribute Sub Type` a value. **New attribute types appear automatically.** Known types get friendly labels and a fixed order and grouping; unknown ones are listed under "Other".
 - **LEA** (from Land Details, as `code: description`) and **Neighborhood** (from Accounts) are treated as categories too, so they can be filters, colored on the map, or checked for consistency like any other attribute.
 - **"No land line expected":** mobile home accounts (account number starts with `M`) and condo units normally have no land line. They aren't flagged as missing land data, and they have their own map category.
-- **Qualified sales:** a sale counts when `TYPE OF TRANSACTION` contains `QUALIFIED`. Sales are kept newest first, with sale price, adjusted sale price, qualified level (Q1 from `VALID 1 FLAG`, Q2 from `VALID 2 FLAG`), analysis type and, for Q2 sales, the invalid-sale reason.
+- **Qualified sales:** a sale counts when `TYPE OF TRANSACTION` contains `QUALIFIED`. Sales are kept newest first, with sale price, adjusted sale price, valid level (V1 from `VALID 1 FLAG`, V2 from `VALID 2 FLAG`), analysis type and, for V2 sales, the invalid-sale reason.
 
 The full county loads and builds in about half a second.
 

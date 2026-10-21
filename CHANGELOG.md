@@ -2,6 +2,18 @@
 
 Each version is tagged on GitHub and has an install package under **Releases**. To install one on the county server: `update.ps1 -Version <version>`.
 
+## v1.3 (2026-10-21)
+
+Requests from the Assessor's Office.
+
+- **Owner name** on the parcel card and in the "Download list" CSV: the current primary owner, from a new `Owner Name` / `Owner Name 2` column in LAD - Accounts. Owners marked private in RealWare show as "NO OWNER INFO". **This is new data on the server:** owner names are now saved with the other account data (mailing addresses are still not).
+- **Hover:** the map tooltip always shows the account number, with the address underneath (before, it showed the address when there was one and the account number otherwise).
+- **V1/V2:** the sale levels are labelled V1, V2 and V1 + V2 (were Q1/Q2), matching RealWare's Valid 1 / Valid 2 flags. In the "Download list" CSV the columns are now `valid_level` and `v2_reason`.
+- **Economic area filter** next to property area, LEA and neighborhood, on the map and on Review & Stats. The parcel card and the "Download list" CSV show the economic area. The top search box finds economic areas too.
+- **Area outline:** when an area filter is set, the parcels in that area are outlined and every other parcel is faded, so the area's edge is easy to see. A checkbox in step 1 turns it off.
+- **Imported list (new step 5):** choose an Excel (.xlsx) or CSV file, or paste a column copied from Excel. Account numbers and parcel numbers are matched automatically, and the matching parcels get a yellow outline. It shows how many matched and lists the ones that didn't, with **Zoom to list** and **Clear list**. The file is read in the browser and is never sent to the server. No new libraries were added.
+- **Review & Stats:** the "in current filter" note on the Accounts tile now also counts the property area filter.
+
 ## v1.2 (2026-10-15)
 
 Security fixes from the County IT code review (2026-10-13), a reorganized map sidebar, and new sales filters.

@@ -4,19 +4,19 @@ The app reads five saved ListBuilder searches from RealWare. It runs them once a
 
 | Query ID | Search | One row per | Used for |
 |---|---|---|---|
-| 43632 | **LAD - Accounts** | account | Account type, parcel #, address, area, economic area, subdivision, condo, neighborhood |
+| 43632 | **LAD - Accounts** | account | Account type, parcel #, address, area, economic area, subdivision, condo, neighborhood, primary owner name |
 | 43633 | **LAD - Land Attributes** | land attribute | Every attribute type and sub-type (views, utilities, site access, land type, unique characteristics, …) |
 | 43634 | **LAD - Land Details** | land line | LEA code and description, gross acres and square feet |
-| 43636 | **LAD - Sales** | sale / account | Most recent qualified sale in the appraisal period: sale price, adjusted sale price, qualified level (Q1/Q2) and analysis type |
+| 43636 | **LAD - Sales** | sale / account | Most recent qualified sale in the appraisal period: sale price, adjusted sale price, valid level (V1/V2) and analysis type |
 | 43637 | **LAD - Values** | account | Land, improvement and total actual value; "improved" test |
 
 ## Notes
 
 - **Sharing:** the searches are shared with the dedicated read-only RealWare account the app signs in with. A search that isn't shared with that account returns an error.
 - **Row limit:** the server requests up to 500,000 rows per search (setting `Realware:MaxResults`) and stops without saving if a search reaches that limit.
-- **No owner data:** none of the searches the app uses need owner names or mailing addresses.
+- **Owner name (from v1.3):** LAD - Accounts returns `Owner Name` and `Owner Name 2` for the current primary owner. Owners marked private in RealWare come back as `NO OWNER INFO`. Mailing addresses are not used. If the columns are missing, the parcel card simply shows no owner.
 - **Valid sales:** a sale counts as valid when `TYPE OF TRANSACTION` = `QUALIFIED SALE`. The logic is in LAD - Sales.
-- **Qualified level and analysis type (from v1.2):** LAD - Sales also returns `VALID 1 FLAG` and `VALID 2 FLAG` (`VTBLSALE.VALID1FLAG` / `VALID2FLAG`, `1` or `0`) and `ANALYSIS TYPE` (`VTBLSALE.SALEOM1`). The dashboard shows each qualified sale as Q1, Q2 or Q1 + Q2, and can filter sales by level and analysis type. If these columns are missing, those filters are simply hidden.
+- **Valid level and analysis type (from v1.2):** LAD - Sales also returns `VALID 1 FLAG` and `VALID 2 FLAG` (`VTBLSALE.VALID1FLAG` / `VALID2FLAG`, `1` or `0`) and `ANALYSIS TYPE` (`VTBLSALE.SALEOM1`). The dashboard shows each qualified sale as V1, V2 or V1 + V2, and can filter sales by level and analysis type. If these columns are missing, those filters are simply hidden.
 - **Appraisal period:** Gunnison County reappraises in odd years, with values set as of June 30 of the prior year. It uses a minimum of 24 months of sales ([source](https://www.gunnisoncounty.org/665/Assessment-Process)).
 
 | Reappraisal | Sales used | Values as of | Notices of Value by |

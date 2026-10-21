@@ -45,7 +45,8 @@
     accounts: { account: ["ACCOUNT", "ACCOUNTNO"], type: ["ACCOUNTTYPE", "ACCTTYPE"], parcel: ["PARCEL", "PARCELNO"],
                 improvedType: ["PROPERTYTYPE"], address: ["PROPERTYADDRESS"], area: ["PROPERTYAREA"],
                 econ: ["ECONOMICAREA", "ECONOMICAREACODE"], subdivision: ["SUBDIVISION", "SUBDNAME"],
-                condo: ["CONDO", "CONDONAME"], nbhdCode: ["NEIGHBORHOODCODE", "NBHDCODE"], nbhd: ["NEIGHBORHOOD", "NBHDDESCRIPTION"] },
+                condo: ["CONDO", "CONDONAME"], nbhdCode: ["NEIGHBORHOODCODE", "NBHDCODE"], nbhd: ["NEIGHBORHOOD", "NBHDDESCRIPTION"],
+                owner: ["OWNERNAME", "OWNERNAME1"], owner2: ["OWNERNAME2"] },
     land_attributes: { account: ["ACCOUNT", "ACCOUNTNO"], type: ["ATTRIBUTETYPE"], sub: ["ATTRIBUTESUBTYPE"] },
     land_details: { account: ["ACCOUNT", "ACCOUNTNO"], lea: ["DEFAULTLEA", "LEA"], leaDesc: ["LEADESCRIPTION"],
                     acres: ["GROSSACRES"], sf: ["GROSSSQUAREFEET"] },
@@ -103,7 +104,7 @@
       if (i == null) {
         i = A.length; ix.set(acct, i);
         A.push({ account: acct, type: "", parcel: "", improvedType: "", address: "", area: "", econ: "", subdivision: "",
-                 condo: "", nbhdCode: "", nbhd: "", landValue: null, impValue: null, totalValue: null,
+                 condo: "", nbhdCode: "", nbhd: "", owner: "", landValue: null, impValue: null, totalValue: null,
                  acres: 0, raw: new Map(), sales: [], flags: [], inAccounts: false });
       }
       return A[i];
@@ -112,7 +113,7 @@
       const a = getAcct(r.account); if (!a) continue;
       Object.assign(a, { type: str(r.type), parcel: str(r.parcel).replace(/\D/g, ""), improvedType: str(r.improvedType),
         address: str(r.address), area: str(r.area), econ: str(r.econ), subdivision: str(r.subdivision), condo: str(r.condo),
-        nbhdCode: str(r.nbhdCode), nbhd: str(r.nbhd), inAccounts: true });
+        nbhdCode: str(r.nbhdCode), nbhd: str(r.nbhd), owner: [str(r.owner), str(r.owner2)].filter(Boolean).join(" / "), inAccounts: true });
     }
     for (const r of pick(valRaw, "values")) {
       const a = ix.has(str(r.account)) ? A[ix.get(str(r.account))] : null; if (!a) continue;

@@ -7,7 +7,7 @@
       "queryId": 43632,
       "title": "LAD - Accounts",
       "keep": ["Account #", "Account Type", "Parcel #", "Property Type", "Property Address", "Property Area",
-               "Economic Area", "Subdivision", "Condo", "Neighborhood Code", "Neighborhood"]
+               "Economic Area", "Subdivision", "Condo", "Neighborhood Code", "Neighborhood", "Owner Name", "Owner Name 2"]
     },
     {
       "name": "land_attributes",

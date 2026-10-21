@@ -84,8 +84,9 @@
   let M, A, GEO, CATS, CAT_IX, VALUES, fpAccts, LEA_CI, NBHD_CI, typesList, areasList;
   const S = {
     ci: 0, sel: new Map(), valueText: "",
-    types: new Set(), areas: new Set(), leas: new Set(), nbhds: new Set(),
-    saleQ: 0, saleTypes: new Set(),   // sales filters: qualified level (0 = Q1 + Q2, 1 = Q1, 2 = Q2) and analysis types
+    types: new Set(), areas: new Set(), econs: new Set(), leas: new Set(), nbhds: new Set(),
+    saleQ: 0, saleTypes: new Set(),   // sales filters: valid level (0 = V1 + V2, 1 = V1, 2 = V2) and analysis types
+    areaOutline: true, list: null,                       // imported list: { name, fps: Set, accts: Set, missing: [], n }
     showFlags: false, basemap: "light",
     labels: { acct: false, sale: false }, soldMark: false,
     period: { year: defaultPeriod(), extend: 0 },
@@ -94,7 +95,7 @@
     distCi: 0,
   };
   let outliers = [], consensus = new Map(), _obA = null, _obSrc = null;
-  let map, mapReady = false, prevH = null, prevF = null, selFp = -1;
+  let map, mapReady = false, prevH = null, prevF = null, prevArea = null, prevL = null, selFp = -1;
   const whenReady = [];
 
   const periodRange = () => {
@@ -104,10 +105,12 @@
   };
   const saleOk = (s) => (!S.saleQ || (s.q & S.saleQ)) && (!S.saleTypes.size || S.saleTypes.has(s.analysis));
   const saleInPeriod = (a) => { const { start, end } = periodRange(); return a.sales.find((s) => s.date >= start && s.date <= end && saleOk(s)) || null; };
-  const qLabel = (s) => (s.q === 3 ? "Q1 + Q2" : s.q === 2 ? "Q2" : s.q === 1 ? "Q1" : "");
+  const qLabel = (s) => (s.q === 3 ? "V1 + V2" : s.q === 2 ? "V2" : s.q === 1 ? "V1" : "");
   const anyIn = (a, ci, set) => ci == null || !set.size || a.attrs[ci].some((v) => set.has(v));
-  const acctPass = (a) => (!S.types.size || S.types.has(a.type)) && (!S.areas.size || S.areas.has(a.area)) && anyIn(a, LEA_CI, S.leas) && anyIn(a, NBHD_CI, S.nbhds);
-  const areaFiltered = () => S.areas.size + S.leas.size + S.nbhds.size > 0;
+  const areaPass = (a) => (!S.areas.size || S.areas.has(a.area)) && (!S.econs.size || S.econs.has(a.econ)) && anyIn(a, LEA_CI, S.leas) && anyIn(a, NBHD_CI, S.nbhds);
+  const acctPass = (a) => (!S.types.size || S.types.has(a.type)) && areaPass(a);
+  const areaFiltered = () => S.areas.size + S.econs.size + S.leas.size + S.nbhds.size > 0;
+  const econName = (c) => `Economic Area ${c}`;
   const valName = (ci, v) => (v < 0 ? SPECIAL[v] : VALUES[ci][v]);
   const keyName = (ci, key) => (key === "" ? "(blank)" : key.split("|").map((v) => VALUES[ci][+v]).join(" + "));
   const accountMatches = (a, ci, v) =>
@@ -203,7 +206,7 @@
   }
   function filtersChanged() {
     renderChips($("type-chips")); renderChips($("s-type-chips"));
-    for (const id of ["area-ms", "lea-ms", "nbhd-ms", "s-area-ms", "s-lea-ms", "s-nbhd-ms"]) $(id)._paint?.();
+    for (const id of ["area-ms", "econ-ms", "lea-ms", "nbhd-ms", "s-area-ms", "s-econ-ms", "s-lea-ms", "s-nbhd-ms"]) $(id)._paint?.();
     renderLiveCount();
     if (currentPage() === "stats") renderStats();
     renderValues(); applyHighlight();
@@ -219,13 +222,14 @@
   // One-line summary of each step, shown in its header (useful when the step is collapsed).
   function renderStepSums() {
     const names = (set, f) => { const l = [...set].map(f); return l.length <= 2 ? l.join(", ") : `${l[0]} +${l.length - 1}`; };
-    const area = [S.areas.size && names(S.areas, titleish), S.leas.size && `${S.leas.size} LEA${S.leas.size > 1 ? "s" : ""}`,
+    const area = [S.areas.size && names(S.areas, titleish), S.econs.size && names(S.econs, (c) => `EA ${c}`), S.leas.size && `${S.leas.size} LEA${S.leas.size > 1 ? "s" : ""}`,
                   S.nbhds.size && `${S.nbhds.size} nbhd${S.nbhds.size > 1 ? "s" : ""}`].filter(Boolean).join(" · ");
     $("sum-area").textContent = area || "Whole county";
     $("sum-type").textContent = S.types.size ? names(S.types, (t) => t) : "All";
     $("sum-attr").textContent = CATS[S.ci]?.label || "";
-    const sales = [String(periodRange().year), S.saleQ ? `Q${S.saleQ} only` : "", S.saleTypes.size ? `${S.saleTypes.size} type${S.saleTypes.size > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ");
+    const sales = [String(periodRange().year), S.saleQ ? `V${S.saleQ} only` : "", S.saleTypes.size ? `${S.saleTypes.size} type${S.saleTypes.size > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ");
     $("sum-sales").textContent = sales;
+    $("sum-list").textContent = S.list ? `${fmt(S.list.fps.size)} parcels` : "None";
     $("sum-display").textContent = { light: "Light", aerial: "Satellite", topo: "Topo" }[S.basemap] || "";
   }
   const titleish = (s) => s.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase());
@@ -283,13 +287,17 @@
     renderChips($("type-chips")); renderChips($("s-type-chips"));
     const areaCounts = {}; for (const a of A) if (a.area) areaCounts[a.area] = (areaCounts[a.area] || 0) + 1;
     const areaItems = Object.entries(areaCounts).map(([n, c]) => [n, n, c]);
-    for (const [id, noun, items, set] of [["area-ms", "Property area", areaItems, S.areas], ["lea-ms", "LEA", LEA_CI != null && attrItems(LEA_CI), S.leas],
+    const econCounts = {}; for (const a of A) if (a.econ) econCounts[a.econ] = (econCounts[a.econ] || 0) + 1;
+    const econItems = Object.entries(econCounts).map(([n, c]) => [n, econName(n), c]);
+    for (const [id, noun, items, set] of [["area-ms", "Property area", areaItems, S.areas], ["econ-ms", "Economic area", econItems, S.econs], ["lea-ms", "LEA", LEA_CI != null && attrItems(LEA_CI), S.leas],
                                           ["nbhd-ms", "Neighborhood", NBHD_CI != null && attrItems(NBHD_CI), S.nbhds]]) {
       multiSelect($(id), { noun, items, set });
       multiSelect($("s-" + id), { noun, items, set });
     }
     $("zoom-area").onclick = zoomToArea;
-    $("whole-county").onclick = () => { S.areas.clear(); S.leas.clear(); S.nbhds.clear(); filtersChanged(); zoomToArea(); };
+    $("area-outline").onchange = () => { S.areaOutline = $("area-outline").checked; applyArea(); };
+    initList();
+    $("whole-county").onclick = () => { S.areas.clear(); S.econs.clear(); S.leas.clear(); S.nbhds.clear(); filtersChanged(); zoomToArea(); };
     $("show-flags").onchange = () => { S.showFlags = $("show-flags").checked; document.querySelector(".flag-legend").hidden = !S.showFlags; applyFlags(); };
     $("basemap").onclick = (e) => { const b = e.target.closest("button"); if (b) { setBasemap(b.dataset.bm); renderStepSums(); } };
 
@@ -354,7 +362,7 @@
   }
   function renderPeriodNote() {
     const { start, end } = periodRange();
-    const which = [S.saleQ ? `Q${S.saleQ}` : "", S.saleTypes.size ? "selected analysis types" : ""].filter(Boolean).join(", ");
+    const which = [S.saleQ ? `V${S.saleQ}` : "", S.saleTypes.size ? "selected analysis types" : ""].filter(Boolean).join(", ");
     $("period-note").textContent = `Qualified sales ${mdy(start)} – ${mdy(end)}${which ? ` (${which})` : ""}`;
   }
   function setReview(issue, ci) {
@@ -448,6 +456,16 @@
       addCalloutImages();
       map.addLayer({ id: "parcels-fill", type: "fill", source: "parcels", paint: {} });
       map.addLayer({ id: "parcels-line", type: "line", source: "parcels", paint: {} });
+      // Area outline (state "ar": 1 = in the selected area, 2 = outside it, faded) and imported list (state "l").
+      map.addLayer({ id: "parcels-area", type: "line", source: "parcels", paint: {
+        "line-width": ["interpolate", ["linear"], ["zoom"], 9, 0.8, 15, 1.8],
+        "line-opacity": ["case", ["==", ["feature-state", "ar"], 1], 0.9, 0] } });
+      map.addLayer({ id: "parcels-list-edge", type: "line", source: "parcels", paint: {
+        "line-color": "#3a3000", "line-width": ["interpolate", ["linear"], ["zoom"], 9, 2.6, 15, 5.5],
+        "line-opacity": ["case", ["boolean", ["feature-state", "l"], false], 0.85, 0] } });
+      map.addLayer({ id: "parcels-list", type: "line", source: "parcels", paint: {
+        "line-color": "#ffd60a", "line-width": ["interpolate", ["linear"], ["zoom"], 9, 1.4, 15, 3.2],
+        "line-opacity": ["case", ["boolean", ["feature-state", "l"], false], 1, 0] } });
       map.addLayer({ id: "parcels-flag", type: "line", source: "parcels", paint: {
         "line-color": "#d03b3b", "line-width": ["interpolate", ["linear"], ["zoom"], 9, 1.2, 15, 2.6],
         "line-opacity": ["case", ["boolean", ["feature-state", "f"], false], 1, 0] } });
@@ -462,9 +480,9 @@
       setBasemap(S.basemap);
       const ready = () => {
         if (mapReady || !map.isSourceLoaded("parcels")) return;
-        mapReady = true; $("loading").hidden = true; prevH = null; prevF = null;
+        mapReady = true; $("loading").hidden = true; prevH = null; prevF = null; prevArea = null; prevL = null;
         map.off("sourcedata", ready);
-        applyHighlight(); updateLabels(); updateSold();
+        applyHighlight(); applyList(); updateLabels(); updateSold();
         for (const fn of whenReady.splice(0)) fn();
       };
       map.on("sourcedata", ready);
@@ -481,12 +499,14 @@
         if (!pending) return; const ev = pending; pending = null;
         const fp = ev.fp; const accts = fpAccts[fp] || [];
         const a = A[accts[0]];
-        let html = a ? `<strong>${esc(a.address || a.account)}</strong>` : `<strong>Parcel ${esc(GEO[fp][1][0] || "")}</strong>`;
+        let html = a ? `<strong>${esc(a.account)}</strong>` : `<strong>Parcel ${esc(GEO[fp][1][0] || "")}</strong>`;
         if (accts.length > 1) html += ` <span class="m">+${accts.length - 1} more account${accts.length > 2 ? "s" : ""}</span>`;
         if (a) {
+          html += `<div>${esc(a.address || "No situs address")}</div>`;
           const vs = a.hasLand ? a.attrs[S.ci].map((v) => VALUES[S.ci][v]) : null;
           html += `<div class="m">${esc(CATS[S.ci].label)}: ${esc(vs == null ? (a.landExpected ? "no land data" : "mobile home / condo, no land line") : vs.length ? vs.join(", ") : "—")}</div>`;
-          const s = saleInPeriod(a); if (s) html += `<div class="m">Qualified sale ${mdy(s.date)} · ${money(s.price)}</div>`;
+          const s = saleInPeriod(a); if (s) html += `<div class="m">Qualified sale ${mdy(s.date)} · ${money(s.price)}${s.q ? " · " + qLabel(s) : ""}</div>`;
+          if (S.list && S.list.fps.has(fp)) html += `<div class="m"><span class="list-tag">On imported list</span></div>`;
         } else html += `<div class="m">No account in current data</div>`;
         tipEl.innerHTML = html; tipEl.hidden = false;
         const { x, y } = ev.point; const w = map.getCanvas().clientWidth;
@@ -511,8 +531,12 @@
     const fill = ["match", h, 1, other]; slots.forEach((c, i) => fill.push(i + 2, hexA(c, fillA)));
     fill.push(8, hexA(MULTI[dark ? "dark" : "light"], fillA), "rgba(0,0,0,0)");
     const stroke = ["match", h]; slots.forEach((c, i) => stroke.push(i + 2, c)); stroke.push(8, MULTI[dark ? "dark" : "light"], line);
+    const out = ["==", ["feature-state", "ar"], 2];
     map.setPaintProperty("parcels-fill", "fill-color", fill);
+    map.setPaintProperty("parcels-fill", "fill-opacity", ["case", out, 0.3, 1]);
     map.setPaintProperty("parcels-line", "line-color", stroke);
+    map.setPaintProperty("parcels-line", "line-opacity", ["case", out, 0.3, 1]);
+    map.setPaintProperty("parcels-area", "line-color", dark ? "#ffffff" : "#1d2b44");
     map.setPaintProperty("parcels-line", "line-width", ["interpolate", ["linear"], ["zoom"], 8, ["case", [">=", h, 2], 0.6, 0.15], 13, ["case", [">=", h, 2], 1, 0.5], 17, ["case", [">=", h, 2], 1.6, 1.1]]);
     map.setPaintProperty("parcels-sel", "line-color", dark ? "#ffffff" : "#0b0b0b");
     map.setPaintProperty("labels", "text-color", dark ? "#ffffff" : "#0b0b0b");
@@ -555,15 +579,35 @@
     $("dl-hl").onclick = () => {
       const rows = A.filter((a) => acctPass(a) && sel.some(([v]) => accountMatches(a, ci, v))).map((a) => {
         const s = saleInPeriod(a);
-        return [a.account, a.parcel, a.type, a.address, a.area, a.subdivision, a.hasLand ? a.attrs[ci].map((x) => VALUES[ci][x]).join("; ") : "",
+        return [a.account, a.parcel, a.type, a.owner, a.address, a.area, a.econ ? econName(a.econ) : "", a.subdivision, a.hasLand ? a.attrs[ci].map((x) => VALUES[ci][x]).join("; ") : "",
                 s ? mdy(s.date) : "", s ? s.price : "", s ? s.adj : "", s ? qLabel(s) : "", s ? s.analysis : "", s && s.q & 2 ? s.reason : ""];
       });
-      downloadCSV(`${CATS[ci].key.replace(/\W+/g, "_")}.csv`, ["account", "parcel", "account_type", "address", "property_area", "subdivision", CATS[ci].label,
-        "qualified_sale_date", "sale_price", "adjusted_sale_price", "qualified_level", "analysis_type", "q2_reason"], rows);
+      downloadCSV(`${CATS[ci].key.replace(/\W+/g, "_")}.csv`, ["account", "parcel", "account_type", "owner", "address", "property_area", "economic_area", "subdivision", CATS[ci].label,
+        "qualified_sale_date", "sale_price", "adjusted_sale_price", "valid_level", "analysis_type", "v2_reason"], rows);
     };
-    applyFlags();
+    applyFlags(); applyArea();
     updateLabels(); updateSold();
     if (selFp >= 0 && !$("detail").hidden) openDetail(selFp, false, true);
+  }
+
+  // Outline the parcels in the selected area (property area / economic area / LEA / neighborhood) and fade the rest.
+  // Account type filters don't count here: the outline shows the area itself.
+  function applyArea() {
+    const on = S.areaOutline && areaFiltered();
+    document.querySelector(".area-legend").hidden = !on;
+    if (!mapReady) return;
+    const R = new Uint8Array(GEO.length);
+    if (on) { R.fill(2); A.forEach((a) => { if (a.fp >= 0 && areaPass(a)) R[a.fp] = 1; }); }
+    for (let i = 0; i < R.length; i++) if (!prevArea || prevArea[i] !== R[i]) map.setFeatureState({ source: "parcels", id: i }, { ar: R[i] });
+    prevArea = R;
+  }
+  function applyList() {
+    document.querySelector(".list-legend").hidden = !S.list;
+    if (!mapReady) return;
+    const L = new Uint8Array(GEO.length);
+    if (S.list) for (const fp of S.list.fps) L[fp] = 1;
+    for (let i = 0; i < L.length; i++) if (!prevL || prevL[i] !== L[i]) map.setFeatureState({ source: "parcels", id: i }, { l: !!L[i] });
+    prevL = L;
   }
 
   function applyFlags() {
@@ -682,8 +726,9 @@
     }
     const issues = issuesFor(i);
     return `<div class="acct">
-      <h3><a href="${RECORD_URL(a.account)}" target="_blank" rel="noopener">${esc(a.account)}</a> <span class="meta">· ${esc(a.type)}${a.improvedType && a.improvedType !== a.type ? " · " + esc(a.improvedType) : ""}</span></h3>
-      <div class="meta">${esc(a.address || "No situs address")}${a.area ? " · " + esc(a.area) : ""}<br>
+      <h3><a href="${RECORD_URL(a.account)}" target="_blank" rel="noopener">${esc(a.account)}</a>${S.list && S.list.accts.has(i) ? ` <span class="list-tag">On list</span>` : ""} <span class="meta">· ${esc(a.type)}${a.improvedType && a.improvedType !== a.type ? " · " + esc(a.improvedType) : ""}</span></h3>
+      ${a.owner ? `<div class="owner">${esc(a.owner)}</div>` : ""}
+      <div class="meta">${esc(a.address || "No situs address")}${a.area ? " · " + esc(a.area) : ""}${a.econ ? " · " + esc(econName(a.econ)) : ""}<br>
         Parcel ${esc(a.parcel || "—")}${a.subdivision ? " · " + esc(a.subdivision) : ""}${a.condo ? " · " + esc(a.condo) : ""}<br>
         ${a.acres ? `Land ${a.acres.toLocaleString(undefined, { maximumFractionDigits: 3 })} ac · ` : ""}Actual value: land ${money(a.landValue)}, impr. ${money(a.impValue)}, total ${money(a.totalValue)}</div>
       ${saleHTML(a)}
@@ -776,7 +821,7 @@
     const conflictAccts = acc.filter((i) => A[i].flags.some((f) => conflictCodes.has(f[1]))).length;
     const ob = outliersByAcct(), outAccts = acc.filter((i) => ob.has(i)).length;
     const unmapped = acc.filter((i) => A[i].fp < 0).length;
-    const filtered = S.types.size || S.leas.size || S.nbhds.size;
+    const filtered = S.types.size || areaFiltered();
     $("tiles").innerHTML = [
       [fmt(acc.length), "Accounts", filtered ? "in current filter" : "all active accounts"],
       [pct(expectedWith, expected.length).toFixed(1) + "%", "Have land data", `${fmt(expected.length - expectedWith)} without · ${fmt(acc.length - expected.length)} mobile home / condo excluded`],
@@ -944,6 +989,121 @@ Click to view on map" style="cursor:pointer">
     }
   }
 
+  // ------------------------------------------------------------------ imported list
+  // An appraiser's own list (Excel, CSV or pasted) of account or parcel numbers, outlined on the map.
+  // Everything happens in this browser: the file is never sent to the server.
+  function initList() {
+    const show = (msg) => { $("list-result").hidden = false; $("list-result").textContent = msg; };
+    $("list-file").onchange = async (e) => {
+      const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+      if (f.size > 25e6) return show("That file is too large (over 25 MB).");
+      try {
+        const rows = /\.xlsx$/i.test(f.name) ? await readXlsx(await f.arrayBuffer()) : parseCSV(await f.text());
+        setList(rows, f.name);
+      } catch (err) { console.error(err); show(`Could not read ${f.name}. Save it as .xlsx or .csv and try again.`); }
+    };
+    $("list-apply").onclick = () => {
+      const t = $("list-paste").value.trim(); if (!t) return;
+      setList(t.includes("\t") ? t.split(/\r?\n/).map((l) => l.split("\t")) : t.split(/[\s,;]+/).map((x) => [x]), "pasted list");
+    };
+    $("list-result").onclick = (e) => {
+      if (e.target.closest("#list-zoom")) zoomToFps([...S.list.fps]);
+      if (e.target.closest("#list-clear")) { S.list = null; $("list-result").hidden = true; $("list-paste").value = ""; listChanged(); }
+    };
+  }
+  function listChanged() {
+    applyList(); renderStepSums();
+    if (selFp >= 0 && !$("detail").hidden) openDetail(selFp, false, true);
+  }
+  // Match each cell to an account number or parcel number. The column with the most matches is the list;
+  // any other column with at least half as many matches is used too (e.g. a file with both account and parcel columns).
+  function setList(rows, name) {
+    const acctIx = new Map(A.map((a, i) => [a.account.toUpperCase(), i]));
+    const byParcel = new Map(); A.forEach((a, i) => { if (a.parcel) (byParcel.get(a.parcel) || byParcel.set(a.parcel, []).get(a.parcel)).push(i); });
+    const fpByParcel = new Map(); GEO.forEach((g, fp) => { for (const p of g[1]) if (!fpByParcel.has(p)) fpByParcel.set(p, fp); });
+    const match = (cell) => {
+      const t = String(cell ?? "").trim().toUpperCase(); if (!t) return null;
+      if (acctIx.has(t)) return { accts: [acctIx.get(t)], fps: [] };
+      const d = t.replace(/\D/g, "");
+      if (d.length >= 6 && (byParcel.has(d) || fpByParcel.has(d))) return { accts: byParcel.get(d) || [], fps: fpByParcel.has(d) ? [fpByParcel.get(d)] : [] };
+      return null;
+    };
+    const width = Math.max(0, ...rows.map((r) => r.length)), hits = Array(width).fill(0);
+    for (const r of rows) r.forEach((c, k) => { if (match(c)) hits[k]++; });
+    const best = Math.max(0, ...hits);
+    if (!best) { S.list = null; listChanged(); $("list-result").hidden = false; $("list-result").textContent = `No account or parcel numbers from ${name} matched the current data.`; return; }
+    const cols = hits.map((h, k) => [h, k]).filter(([h]) => h >= best / 2).map(([, k]) => k);
+    const accts = new Set(), fps = new Set(), missing = []; let n = 0;
+    rows.forEach((r, ri) => {
+      const ms = cols.map((k) => match(r[k])).filter(Boolean);
+      if (ms.length) { n++; for (const m of ms) { for (const i of m.accts) { accts.add(i); if (A[i].fp >= 0) fps.add(A[i].fp); } for (const fp of m.fps) fps.add(fp); } return; }
+      const v = cols.map((k) => String(r[k] ?? "").trim()).find(Boolean);
+      if (v && !(ri === 0 && /[a-z]/i.test(v) && !/\d/.test(v))) missing.push(v);   // skip a header row
+    });
+    S.list = { name, accts, fps, missing, n };
+    const el = $("list-result"); el.hidden = false;
+    el.innerHTML = `<div><strong>${fmt(n)}</strong> of ${fmt(n + missing.length)} matched · <strong>${fmt(fps.size)}</strong> parcels on the map <span class="muted">(${esc(name)})</span></div>
+      ${missing.length ? `<details><summary>${fmt(missing.length)} not found</summary><div class="missing">${missing.slice(0, 500).map(esc).join(", ")}</div></details>` : ""}
+      <div class="actions"><button class="linkbtn" id="list-zoom" ${fps.size ? "" : "disabled"}>Zoom to list</button> <button class="linkbtn" id="list-clear">Clear list</button></div>`;
+    listChanged();
+    if (fps.size) zoomToFps([...fps]);
+  }
+  function parseCSV(text) {
+    const rows = []; let row = [], cell = "", q = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (q) { if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += ch; }
+      else if (ch === '"') q = true;
+      else if (ch === "," || ch === "\t" || ch === ";") { row.push(cell); cell = ""; }
+      else if (ch === "\n" || ch === "\r") { if (ch === "\r" && text[i + 1] === "\n") i++; row.push(cell); rows.push(row); row = []; cell = ""; }
+      else cell += ch;
+    }
+    if (cell || row.length) { row.push(cell); rows.push(row); }
+    return rows;
+  }
+  // Minimal .xlsx reader (first worksheet, cell text only): an .xlsx file is a zip of XML files.
+  async function readXlsx(buf) {
+    const files = await unzip(buf);
+    const xml = (name) => files.has(name) ? new DOMParser().parseFromString(files.get(name), "application/xml") : null;
+    const tags = (doc, t) => [...doc.getElementsByTagNameNS("*", t)];
+    const shared = []; const ss = xml("xl/sharedStrings.xml");
+    if (ss) for (const si of tags(ss, "si")) shared.push(tags(si, "t").filter((t) => t.parentNode.localName !== "rPh").map((t) => t.textContent).join(""));
+    let sheet = "xl/worksheets/sheet1.xml";
+    const wb = xml("xl/workbook.xml"), rels = xml("xl/_rels/workbook.xml.rels");
+    const first = wb && tags(wb, "sheet")[0], rid = first && (first.getAttribute("r:id") || [...first.attributes].find((x) => x.localName === "id")?.value);
+    const target = rid && rels && tags(rels, "Relationship").find((r) => r.getAttribute("Id") === rid)?.getAttribute("Target");
+    if (target) sheet = target.startsWith("/") ? target.slice(1) : "xl/" + target.replace(/^\.\//, "");
+    const doc = xml(sheet) || xml([...files.keys()].find((k) => /^xl\/worksheets\/[^/]+\.xml$/.test(k)));
+    if (!doc) throw new Error("no worksheet");
+    const col = (ref) => { let n = 0; for (const ch of (ref || "").replace(/\d+$/, "")) n = n * 26 + ch.charCodeAt(0) - 64; return n - 1; };
+    return tags(doc, "row").map((r) => {
+      const out = [];
+      tags(r, "c").forEach((c, k) => {
+        const t = c.getAttribute("t"), v = tags(c, "v")[0]?.textContent ?? "";
+        const text = t === "s" ? shared[+v] ?? "" : t === "inlineStr" ? tags(c, "t").map((x) => x.textContent).join("") : v;
+        const i = c.getAttribute("r") ? col(c.getAttribute("r")) : k; out[i] = text;
+      });
+      return out;
+    });
+  }
+  async function unzip(buf) {
+    const dv = new DataView(buf), u8 = new Uint8Array(buf), dec = new TextDecoder(), files = new Map();
+    let e = -1; for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { e = i; break; }
+    if (e < 0) throw new Error("not a zip file");
+    let p = dv.getUint32(e + 16, true);
+    for (let k = dv.getUint16(e + 10, true); k > 0; k--) {
+      if (dv.getUint32(p, true) !== 0x02014b50) break;
+      const method = dv.getUint16(p + 10, true), size = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true);
+      const name = dec.decode(u8.subarray(p + 46, p + 46 + nl)), lho = dv.getUint32(p + 42, true);
+      p += 46 + nl + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true);
+      if (!/\.(xml|rels)$/.test(name)) continue;
+      const start = lho + 30 + dv.getUint16(lho + 26, true) + dv.getUint16(lho + 28, true), data = u8.subarray(start, start + size);
+      const raw = method === 0 ? data : method === 8 ? new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer()) : null;
+      if (raw) files.set(name, dec.decode(raw));
+    }
+    return files;
+  }
+
   // ------------------------------------------------------------------ search
   let index = null;
   function buildIndex() {
@@ -954,6 +1114,7 @@ Click to view on map" style="cursor:pointer">
     for (const [s, ids] of subs) index.push({ kind: "Subdivision", label: s, sub: `${ids.length} accounts`, text: s.toLowerCase(), ids });
     for (const [kind, ci] of [["LEA", LEA_CI], ["Neighborhood", NBHD_CI]]) if (ci != null) VALUES[ci].forEach((name, v) => index.push({ kind, label: name, sub: "add to filter", text: name.toLowerCase(), ci, v }));
     for (const ar of areasList) index.push({ kind: "Area", label: ar, sub: "add to area filter", text: ar.toLowerCase(), area: ar });
+    for (const c of new Set(A.map((a) => a.econ).filter(Boolean))) index.push({ kind: "Econ. area", label: econName(c), sub: "add to area filter", text: econName(c).toLowerCase(), econ: c });
   }
   function initSearch() {
     const inp = $("search"), ul = $("search-results"); let results = [], on = 0;
@@ -982,7 +1143,7 @@ Click to view on map" style="cursor:pointer">
         if (e.kind === "Account") focusAccount(e.i);
         else if (e.kind === "Subdivision") zoomToAccounts(e.ids.map((i) => A[i]));
         else if (e.kind === "LEA" || e.kind === "Neighborhood") { (e.kind === "LEA" ? S.leas : S.nbhds).add(e.v); filtersChanged(); zoomToAccounts(A.filter(acctPass)); }
-        else { S.areas.add(e.area); filtersChanged(); zoomToArea(); }
+        else { e.econ ? S.econs.add(e.econ) : S.areas.add(e.area); filtersChanged(); zoomToArea(); }
       }, 30);
     };
     inp.addEventListener("input", debounce(run, 90));

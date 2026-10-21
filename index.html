@@ -38,10 +38,13 @@
       <div class="step-body">
         <div class="sub-lbl">Property area</div>
         <div id="area-ms" class="ms"></div>
+        <div class="sub-lbl">Economic area</div>
+        <div id="econ-ms" class="ms"></div>
         <div class="sub-lbl">LEA</div>
         <div id="lea-ms" class="ms"></div>
         <div class="sub-lbl">Neighborhood</div>
         <div id="nbhd-ms" class="ms"></div>
+        <label class="check"><input type="checkbox" id="area-outline" checked> Outline the parcels in the selected area and fade the rest</label>
         <div class="row gap step-actions"><button id="zoom-area" class="btn small" type="button" title="Zoom back out to the selected area">Back to area</button><button id="whole-county" class="btn small ghost" type="button">Whole county</button></div>
       </div>
     </section>
@@ -82,11 +85,11 @@
         <select id="extend" aria-label="Extend period"></select>
         <div id="period-note" class="muted small"></div>
         <div id="q-level-wrap">
-          <div class="sub-lbl">Qualified level</div>
+          <div class="sub-lbl">Valid level</div>
           <div class="seg" id="q-level">
-            <button data-q="0" class="on" type="button">Q1 + Q2</button>
-            <button data-q="1" type="button">Q1 only</button>
-            <button data-q="2" type="button">Q2 only</button>
+            <button data-q="0" class="on" type="button">V1 + V2</button>
+            <button data-q="1" type="button">V1 only</button>
+            <button data-q="2" type="button">V2 only</button>
           </div>
         </div>
         <div id="analysis-wrap">
@@ -95,12 +98,23 @@
         </div>
         <label class="check"><input type="checkbox" id="sold-mark"> <span><i class="sw-dot"></i> Mark parcels with a qualified sale in this period</span></label>
         <div id="sold-note" class="muted small" hidden></div>
-        <label class="check"><input type="checkbox" id="lbl-sale"> Callout: qualified sale in this period (date, price, adjusted price, Q1/Q2)</label>
+        <label class="check"><input type="checkbox" id="lbl-sale"> Callout: qualified sale in this period (date, price, adjusted price, V1/V2)</label>
+      </div>
+    </section>
+
+    <section class="step" data-step="list">
+      <button class="step-head" type="button" aria-expanded="true"><span class="step-n">5</span><span class="step-t">Imported list</span><span class="step-sum" id="sum-list"></span><span class="chev" aria-hidden="true">▾</span></button>
+      <div class="step-body">
+        <div class="muted small">Outline the parcels from your own list of account or parcel numbers. The list stays in this browser; nothing is uploaded.</div>
+        <div class="row gap"><label class="btn small file-btn">Choose Excel or CSV file<input type="file" id="list-file" accept=".xlsx,.csv,.txt" hidden></label></div>
+        <textarea id="list-paste" rows="3" placeholder="…or paste account or parcel numbers (e.g. a column copied from Excel)"></textarea>
+        <div class="row gap"><button id="list-apply" class="btn small" type="button">Outline pasted list</button></div>
+        <div id="list-result" class="list-result" hidden></div>
       </div>
     </section>
 
     <section class="step" data-step="display">
-      <button class="step-head" type="button" aria-expanded="true"><span class="step-n">5</span><span class="step-t">Map display</span><span class="step-sum" id="sum-display"></span><span class="chev" aria-hidden="true">▾</span></button>
+      <button class="step-head" type="button" aria-expanded="true"><span class="step-n">6</span><span class="step-t">Map display</span><span class="step-sum" id="sum-display"></span><span class="chev" aria-hidden="true">▾</span></button>
       <div class="step-body">
         <label class="check"><input type="checkbox" id="lbl-acct"> Callout: account number</label>
         <div id="label-note" class="muted small" hidden>Zoom in to see callouts.</div>
@@ -121,6 +135,8 @@
       <span><i class="sw sw-other"></i>Other value</span>
       <span><i class="sw sw-none"></i>No land data or filtered out</span>
       <span class="flag-legend" hidden><i class="sw sw-flag"></i>⚠ Doesn't match neighbors / conflicting entries</span>
+      <span class="area-legend" hidden><i class="sw sw-area"></i>In selected area</span>
+      <span class="list-legend" hidden><i class="sw sw-list"></i>On imported list</span>
       <span class="sold-legend" hidden><i class="sw-dot"></i>Qualified sale in appraisal period</span>
     </div>
     <div id="loading" class="loading">Loading parcels…</div>
@@ -139,6 +155,7 @@
     <div class="filter-row">
       <div><label class="lbl">Account type</label><div id="s-type-chips" class="chips"></div></div>
       <div><label class="lbl">Property area</label><div id="s-area-ms" class="ms"></div></div>
+      <div><label class="lbl">Economic area</label><div id="s-econ-ms" class="ms"></div></div>
       <div><label class="lbl">LEA</label><div id="s-lea-ms" class="ms"></div></div>
       <div><label class="lbl">Neighborhood</label><div id="s-nbhd-ms" class="ms"></div></div>
     </div>
