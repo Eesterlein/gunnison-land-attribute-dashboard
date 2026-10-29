@@ -88,7 +88,7 @@
     saleQ: 0, saleTypes: new Set(),   // sales filters: valid level (0 = V1 + V2, 1 = V1, 2 = V2) and analysis types
     areaOutline: true, list: null,                       // imported list: { name, fps: Set, accts: Set, missing: [], n }
     showFlags: false, basemap: "light",
-    labels: { acct: false, sale: false }, soldMark: false,
+    labels: { acct: false, sale: false, list: false }, soldMark: false,
     period: { year: defaultPeriod(), extend: 0 },
     nb: { basis: "adjacent", min: 4, agree: 0.75 },
     review: { issue: "", ci: "", text: "", limit: 200, group: "" },
@@ -305,6 +305,12 @@
     $("sold-mark").onchange = () => { S.soldMark = $("sold-mark").checked; document.querySelector(".sold-legend").hidden = !S.soldMark; updateSold(); };
     $("lbl-acct").onchange = () => { S.labels.acct = $("lbl-acct").checked; updateLabels(); };
     $("lbl-sale").onchange = () => { S.labels.sale = $("lbl-sale").checked; updateLabels(); };
+    // Turning on list-only callouts with no callout chosen turns on the account number callout.
+    $("lbl-list").onchange = () => {
+      S.labels.list = $("lbl-list").checked;
+      if (S.labels.list && !S.labels.acct && !S.labels.sale) $("lbl-acct").checked = S.labels.acct = true;
+      updateLabels();
+    };
     $("period").innerHTML = PERIODS.map((p) => `<option value="${p.year}">${p.year} reappraisal: ${mdy(p.start)} – ${mdy(p.end)}${p.inProgress ? " (in progress)" : ""}</option>`).join("");
     $("period").value = S.period.year;
     $("extend").innerHTML = [0, 6, 12, 18, 24, 36].map((m) => `<option value="${m}">${m ? `Extend back ${m} months` : "No extension (24 months)"}</option>`).join("");
@@ -623,13 +629,15 @@
   }
 
   // Callout labels: account number and/or most recent qualified sale in the appraisal period.
+  // With "only accounts on this list", callouts go on the imported list's accounts only (like the yellow outline, other filters don't apply).
   function updateLabels() {
     if (!mapReady) return;
     const features = [];
     if (S.labels.acct || S.labels.sale) {
       GEO.forEach((g, fp) => {
         const pt = g[4]; if (!pt) return;
-        const accts = fpAccts[fp].filter((i) => acctPass(A[i])); if (!accts.length) return;
+        const listOnly = S.labels.list && S.list;
+        const accts = fpAccts[fp].filter((i) => listOnly ? S.list.accts.has(i) : acctPass(A[i])); if (!accts.length) return;
         let best = null, bestA = accts[0];
         if (S.labels.sale) for (const i of accts) { const s = saleInPeriod(A[i]); if (s && (!best || s.date > best.date)) { best = s; bestA = i; } }
         const lines = [];
@@ -1012,7 +1020,8 @@ Click to view on map" style="cursor:pointer">
     };
   }
   function listChanged() {
-    applyList(); renderStepSums();
+    $("lbl-list-row").hidden = !S.list;
+    applyList(); renderStepSums(); updateLabels();
     if (selFp >= 0 && !$("detail").hidden) openDetail(selFp, false, true);
   }
   // Match each cell to an account number or parcel number. The column with the most matches is the list;

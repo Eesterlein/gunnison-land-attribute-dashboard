@@ -2,6 +2,10 @@
 
 Each version is tagged on GitHub and has an install package under **Releases**. To install one on the county server: `update.ps1 -Version <version>`.
 
+## v1.4 (unreleased)
+
+- **Imported list callouts:** after importing a list, a new checkbox in step 5, "Callouts: only accounts on this list", puts callouts on the list's accounts only, so they're easy to pick out. Like the yellow outline, it ignores the other filters. If no callout is turned on yet, checking it turns on the account number callout.
+
 ## v1.3 (2026-10-21)
 
 Requests from the Assessor's Office.
