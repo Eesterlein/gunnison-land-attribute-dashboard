@@ -2,6 +2,15 @@
 
 Each version is tagged on GitHub and has an install package under **Releases**. To install one on the county server: `update.ps1 -Version <version>`.
 
+## v1.5 (unreleased)
+
+Updates now come from the county's GitHub repository.
+
+- **Downloads from the county repository:** `update.ps1` and `install.ps1` now download from `Gunnison-County/GC-Assessor-RealWareDashboard` by default. That repository is private, so they sign in with a read-only GitHub token saved on the server. `update.ps1 -SetToken` asks for the token, saves it in `C:\ProgramData\LandAttributeDashboard\github-token.txt` (readable only by Administrators and SYSTEM) and tests it. An expired or wrong token gets a plain message saying what to do. Setup steps are in `docs/UPDATING.md`.
+- **Checksum check:** every download is checked against the release's `SHA256SUMS.txt`, and nothing is installed if it doesn't match.
+- **Install a downloaded zip:** `update.ps1 -ZipPath <file>` (and `install.ps1 -ZipPath`) installs a zip downloaded by hand from the release page, with no token needed. The checksum is still checked when `SHA256SUMS.txt` is in the same folder.
+- **Docs** point to the county repository.
+
 ## v1.4 (2026-10-29)
 
 - **Imported list callouts:** after importing a list, a new checkbox in step 5, "Callouts: only accounts on this list", puts callouts on the list's accounts only, so they're easy to pick out. Like the yellow outline, it ignores the other filters. If no callout is turned on yet, checking it turns on the account number callout.

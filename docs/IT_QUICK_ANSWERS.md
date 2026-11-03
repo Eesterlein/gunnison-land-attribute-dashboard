@@ -44,7 +44,7 @@ Staff browsers do load a few public resources from the internet. **No county dat
 | server.arcgisonline.com (Esri) | Basemap images: light, satellite, topo |
 | protomaps.github.io | Fonts for map labels |
 | property.spatialest.com | Links that open the County's public property page for an account |
-| github.com | Downloading releases, only when the install or update script is run |
+| github.com, api.github.com, release-assets.githubusercontent.com | Downloading releases from the county repository, only when the install or update script is run (from the server, not staff browsers) |
 
 The map library (MapLibre GL JS) ships with the dashboard, so no code is loaded from the internet. The label fonts can also be hosted on the county server, if preferred.
 
@@ -67,7 +67,7 @@ Anyone who can reach the site on the county network. To limit it to signed-in Co
 | Anyone with site access can trigger a refresh | A refresh only runs read-only saved searches. Every attempt counts toward a 5-minute gap, only one can run at a time, and after a failed sign-in the button pauses for 15 minutes or more (doubling, up to 4 hours) so the account can't be locked out. |
 | A bad or partial refresh replaces good data | Refused automatically. Data is only replaced if every search succeeds. A search that returns nothing, hits the row limit, or shrinks to under half its previous size keeps the old data, and the error appears at `/api/status`. |
 | Outside resources (fonts, basemaps) | Public, read-only content; no county data sent, and no scripts loaded. The fonts can be hosted locally if IT prefers. |
-| Software updates | Release packages are built by GitHub from the public code in this repository, with build steps pinned to exact versions and a SHA-256 checksum published for each package, so IT can review and verify any change before installing it. `update.ps1` never touches the settings file or saved data, and `update.ps1 -Version <old>` rolls back. |
+| Software updates | Release packages are built by GitHub Actions in the county's own repository (`Gunnison-County/GC-Assessor-RealWareDashboard`), with build steps pinned to exact versions and a SHA-256 checksum published for each package, so IT can review and verify any change before installing it. The server downloads them with a read-only token limited to that one repository, saved where only Administrators and SYSTEM can read it, and `update.ps1` refuses a package whose checksum doesn't match. It never touches the settings file or saved data, and `update.ps1 -Version <old>` rolls back. |
 | User input | No logins, forms, file uploads or stored user input. The only actions are viewing and the read-only Refresh. Values from RealWare are always shown as text, never as page code, and CSV exports are protected against spreadsheet formulas. |
 
 ### Is it an AI system under the County AI Policy?

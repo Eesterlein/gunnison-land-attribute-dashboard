@@ -58,16 +58,20 @@ The LAD searches are saved under one RealWare user and are **not shared**, so th
 
 The installer does Steps 3–5 below for you.
 
-1. Download **`install.ps1`** from the latest release: https://github.com/Eesterlein/gunnison-land-attribute-dashboard/releases/latest
-2. Open PowerShell **as Administrator** in the folder where you saved it, and run:
+1. Download **`install.ps1`** from the latest release, signed in to GitHub: https://github.com/Gunnison-County/GC-Assessor-RealWareDashboard/releases/latest
+2. Create the read-only GitHub token described in [`UPDATING.md`](UPDATING.md#the-github-token-one-time-renewed-yearly). The repository is private, so the installer needs it to download the program.
+3. Open PowerShell **as Administrator** in the folder where you saved it, save the token, then install:
 
 ```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -SetToken
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
+   Without a token, download `LandAttributeDashboard.zip` and `SHA256SUMS.txt` from the same release page into the same folder and run `.\install.ps1 -ZipPath .\LandAttributeDashboard.zip` instead.
+
    It uses port 8080 by default. Add `-Port 80 -HostName <name>` to use a host name instead.
 
-3. Answer the three questions it asks: **RealWare API address**, **username** and **password** (from Step 0). The password isn't shown as you type. If the address is `http://`, it also asks whether to allow that for now.
+4. Answer the three questions it asks: **RealWare API address**, **username** and **password** (from Step 0). The password isn't shown as you type. If the address is `http://`, it also asks whether to allow that for now.
 
 The installer:
 - downloads the program into `C:\inetpub\LandAttributeDashboard`
@@ -86,14 +90,14 @@ Running it again is safe, and it keeps the existing settings.
 
 **Option A: download the ready-built package.** Each version is built automatically by GitHub from the code in this repository (see `.github/workflows/release.yml`).
 
-1. Download **`LandAttributeDashboard.zip`** from the latest release: https://github.com/Eesterlein/gunnison-land-attribute-dashboard/releases/latest
+1. Download **`LandAttributeDashboard.zip`** from the latest release, signed in to GitHub: https://github.com/Gunnison-County/GC-Assessor-RealWareDashboard/releases/latest
 2. Unzip it into **`C:\inetpub\LandAttributeDashboard`**.
 
 **Option B: build it yourself from source.** Install the .NET 10 SDK, then:
 
 ```powershell
-git clone https://github.com/Eesterlein/gunnison-land-attribute-dashboard.git
-cd gunnison-land-attribute-dashboard
+git clone https://github.com/Gunnison-County/GC-Assessor-RealWareDashboard.git
+cd GC-Assessor-RealWareDashboard
 dotnet publish server -c Release -o C:\inetpub\LandAttributeDashboard
 copy deploy\*.ps1 C:\inetpub\LandAttributeDashboard\
 ```
@@ -180,7 +184,7 @@ Expected row counts, roughly: accounts ~21,000; land attributes ~100,000–150,0
 
 ## Updating
 
-- **New version of the dashboard:** in PowerShell as Administrator, run `C:\inetpub\LandAttributeDashboard\update.ps1`. It downloads the latest release, stops the app pool, copies the new files, and starts it again. `appsettings.Production.json` and `wwwroot\data\raw\` are never touched. To install a specific version, or roll back, run `update.ps1 -Version v1.0`. Details are in [`UPDATING.md`](UPDATING.md).
+- **New version of the dashboard:** in PowerShell as Administrator, run `C:\inetpub\LandAttributeDashboard\update.ps1`. It downloads the latest release from the county repository (using the GitHub token saved with `update.ps1 -SetToken`), checks its checksum, stops the app pool, copies the new files, and starts it again. `appsettings.Production.json` and `wwwroot\data\raw\` are never touched. To install a specific version, or roll back, run `update.ps1 -Version v1.0`. Details are in [`UPDATING.md`](UPDATING.md).
 - **New parcel shapes:** these come from the county `Taxparcelassessor` shapefile. Someone with Python and `geopandas` runs `python scripts/build_geometry.py <path>\Taxparcelassessor.shp` and commits the two updated files (`data/parcels.geojson`, `data/geo_index.json`). Then publish as above.
 - **A ListBuilder search changes ID or columns:** edit `config/searches.json` (query IDs and the `keep` column list) and publish.
 
