@@ -2,7 +2,7 @@
 
 Each version is tagged on GitHub and has an install package under **Releases**. To install one on the county server: `update.ps1 -Version <version>`.
 
-## v1.5 (unreleased)
+## v1.5 (2026-11-04)
 
 Updates now come from the county's GitHub repository.
 
