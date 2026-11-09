@@ -2,6 +2,14 @@
 
 Each version is tagged on GitHub and has an install package under **Releases**. To install one on the county server: `update.ps1 -Version <version>`.
 
+## v1.6 (2026-11-08)
+
+- **Area colors (step 1):** each LEA you pick gets its own outline color (up to 4), with a dark edge so it reads as a boundary and not as a value color. Attribute values keep their fill colors, so you can see which LEA each colored parcel is in. A small key on the map lists the colored LEAs with their account counts; click a row to zoom to that LEA, or collapse the key. Each picked LEA is also labeled with its code on the map. Past 4 LEAs the outline is the plain area color, but every LEA is still labeled. Parcels in more than one picked LEA get a gray outline. When no attribute value is picked, the colored areas also get a light fill so they show from far out.
+- **Outline colors** (step 1): by default the colors follow the list you last picked from (LEA, neighborhood, economic area or property area). The dropdown can fix it to one list, or use one plain color. The hover tooltip shows which colored area a parcel is in.
+- **Compass:** the map's compass button is back. When the map is turned (right-drag, Ctrl-drag or two-finger twist), the arrow shows where north is; click it to turn the map back to north.
+- **City of Gunnison layers (step 6):** the City's electric service area, water and sewer service area, and refuse and recycling pickup areas (labeled by day), as dashed outlines. They come from the City's public ArcGIS layer "City of Gunnison Utility Service Areas" (no account or key needed). A copy ships with each release in `assets/layers/`, so the server makes no outside calls. To update the copy, run `python3 scripts/fetch_city_layers.py` before tagging. The checkboxes are remembered in each browser.
+- **Legend** sits higher so it no longer covers the map's distance scale.
+
 ## v1.5 (2026-11-04)
 
 Updates now come from the county's GitHub repository.

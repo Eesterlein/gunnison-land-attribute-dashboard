@@ -81,6 +81,7 @@ The server needs HTTPS access to `api.github.com` and to GitHub's download host,
 | Visual or behavior change (map, colors, labels, checks, stats) | Steps 2 → 4. No RealWare changes needed. |
 | Need a new column or data from RealWare | Add it to the LAD search in ListBuilder, then Steps 2 → 4 (`config/searches.json` gets updated). |
 | New parcel shapefile from GIS | Rebuild `data/parcels.geojson` + `data/geo_index.json` with `scripts/build_geometry.py`, then Steps 2 → 4. |
+| City of Gunnison changed its utility service areas | Run `python3 scripts/fetch_city_layers.py` (updates `assets/layers/city-utility-service-areas.geojson`), then Steps 2 → 4. |
 | An update caused a problem | Roll back: `update.ps1 -Version <previous version>`. Then fix it here. |
 | RealWare password changed | Not an update. IT edits `appsettings.Production.json` and restarts the app pool. Until then, refreshes fail with "RealWare sign-in failed" and the last good data stays on screen. |
 | `update.ps1` says the token wasn't accepted (401) | The token expired or was revoked. Create a new one and run `update.ps1 -SetToken`. |

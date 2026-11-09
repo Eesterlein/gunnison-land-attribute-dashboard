@@ -17,6 +17,13 @@
     dark:  ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085e9"],
   };
   const MULTI = { light: "#52514e", dark: "#c3c2b7" };
+  // Area outline colors (step 1): the largest set from the same validated palette that stays tellable apart in every pair,
+  // light and dark. Green is unused by the value colors; the other three are the value colors used least often.
+  // Past 4 areas, outlines fall back to the plain area color; every colored list also gets a name label on the map.
+  const AREA_COLORS = { light: ["#008300", "#6250d6", "#e87ba4", "#eda100"], dark: ["#008300", "#9085e9", "#d55181", "#c98500"] };
+  const AREA_MAX = 4;
+  const AREA_NAVY = { light: "#1d2b44", dark: "#ffffff" };
+  const CITY_LAYERS = { electric: "City electric service area", water_sewer: "City water and sewer", refuse: "Refuse pickup" };
   const ISSUES = {
     missing:             { label: "Missing",                       group: "missing",  about: "A core land attribute is blank. When enough neighbors agree, the detail shows what they carry." },
     outlier:             { label: "Differs from neighbors",        group: "outlier",  about: "The account's value differs from the value most comparable properties around it carry (settings on Review & Stats)." },
@@ -86,7 +93,8 @@
     ci: 0, sel: new Map(), valueText: "",
     types: new Set(), areas: new Set(), econs: new Set(), leas: new Set(), nbhds: new Set(),
     saleQ: 0, saleTypes: new Set(),   // sales filters: valid level (0 = V1 + V2, 1 = V1, 2 = V2) and analysis types
-    areaOutline: true, list: null,                       // imported list: { name, fps: Set, accts: Set, missing: [], n }
+    areaOutline: true, colorBy: "auto", lastDim: null, list: null,
+    layers: { electric: false, water_sewer: false, refuse: false },   // City of Gunnison utility layers (step 6)                       // imported list: { name, fps: Set, accts: Set, missing: [], n }
     showFlags: false, basemap: "light",
     labels: { acct: false, sale: false, list: false }, soldMark: false,
     period: { year: defaultPeriod(), extend: 0 },
@@ -96,6 +104,7 @@
   };
   let outliers = [], consensus = new Map(), _obA = null, _obSrc = null;
   let map, mapReady = false, prevH = null, prevF = null, prevArea = null, prevL = null, selFp = -1;
+  const areaSlotMap = { lea: new Map(), nbhd: new Map(), econ: new Map(), area: new Map() };   // color slot per picked value (color follows the value)
   const whenReady = [];
 
   const periodRange = () => {
@@ -117,6 +126,31 @@
     v === NO_LAND ? !a.hasLand && a.landExpected :
     v === NO_LAND_OK ? !a.hasLand && !a.landExpected :
     !a.hasLand ? false : v === NO_VALUE ? a.attrs[ci].length === 0 : a.attrs[ci].includes(v);
+
+  // The four step-1 area lists that can carry outline colors.
+  const DIMS = {
+    lea:  { noun: "LEA", set: () => S.leas, vals: (a) => (LEA_CI == null ? [] : a.attrs[LEA_CI]), name: (v) => VALUES[LEA_CI][v], short: (v) => VALUES[LEA_CI][v].split(":")[0].trim() },
+    nbhd: { noun: "neighborhood", set: () => S.nbhds, vals: (a) => (NBHD_CI == null ? [] : a.attrs[NBHD_CI]), name: (v) => VALUES[NBHD_CI][v], short: (v) => VALUES[NBHD_CI][v] },
+    econ: { noun: "economic area", set: () => S.econs, vals: (a) => (a.econ ? [a.econ] : []), name: (c) => econName(c), short: (c) => `EA ${c}` },
+    area: { noun: "property area", set: () => S.areas, vals: (a) => (a.area ? [a.area] : []), name: (v) => titleish(v), short: (v) => titleish(v) },
+  };
+  // Which list colors the outlines: the one picked in "Outline colors", or (auto) the list last changed that has picks.
+  function colorDim() {
+    if (!S.areaOutline || S.colorBy === "none") return null;
+    const k = S.colorBy !== "auto" ? S.colorBy : S.lastDim && DIMS[S.lastDim].set().size ? S.lastDim : ["lea", "nbhd", "econ", "area"].find((d) => DIMS[d].set().size);
+    return k && DIMS[k].set().size ? k : null;
+  }
+  // { k, m: Map(value -> slot) } for the colored list. A value keeps its slot while picked; new picks take the lowest free slot.
+  function areaSlots() {
+    const k = colorDim(); if (!k) return null;
+    const set = DIMS[k].set(), m = areaSlotMap[k];
+    for (const v of [...m.keys()]) if (!set.has(v)) m.delete(v);
+    const used = new Set(m.values());
+    for (const v of set) if (!m.has(v)) { let s = 0; while (used.has(s)) s++; m.set(v, s); used.add(s); }
+    return { k, m };
+  }
+  const mapDark = () => mode() === "dark" || S.basemap === "aerial";
+  const areaColor = (slot) => (slot < AREA_MAX ? AREA_COLORS[mode()][slot] : AREA_NAVY[mapDark() ? "dark" : "light"]);
 
   // ------------------------------------------------------------------ load
   LADData.load().then((m) => {
@@ -169,7 +203,7 @@
     const counts = new Map(); for (const a of A) for (const v of a.attrs[ci]) counts.set(v, (counts.get(v) || 0) + 1);
     return VALUES[ci].map((name, v) => [v, name, counts.get(v) || 0]);
   };
-  function multiSelect(el, { noun, items, set, onChange = () => { filtersChanged(); autoZoom(); } }) {
+  function multiSelect(el, { noun, items, set, dim = null, onChange = () => { filtersChanged(); autoZoom(); } }) {
     if (!items || !items.length) { el.innerHTML = `<div class="ms-empty">No ${noun.toLowerCase()} data</div>`; return; }
     items = items.slice().sort((x, y) => x[1].localeCompare(y[1], undefined, { numeric: true }));
     const nameOf = new Map(items.map(([v, n]) => [v, n]));
@@ -180,8 +214,9 @@
     const paint = () => {
       el.querySelector(".ms-label").textContent = label();
       const t = q.value.trim().toLowerCase();
+      const sl = dim ? areaSlots() : null, slots = sl && sl.k === dim ? sl.m : null;
       ul.innerHTML = items.map((it, k) => [it, k]).filter(([[, n]]) => !t || n.toLowerCase().includes(t)).slice(0, 400).map(([[v, n, c], k]) =>
-        `<li data-k="${k}" role="option" aria-selected="${set.has(v)}"><input type="checkbox" tabindex="-1" ${set.has(v) ? "checked" : ""}><span class="nm">${esc(n)}</span><span class="n">${fmt(c)}</span></li>`).join("");
+        `<li data-k="${k}" role="option" aria-selected="${set.has(v)}"><input type="checkbox" tabindex="-1" ${set.has(v) ? "checked" : ""}>${slots && slots.has(v) ? `<i class="ms-sw" style="border-color:${areaColor(slots.get(v))}"></i>` : ""}<span class="nm">${esc(n)}</span><span class="n">${fmt(c)}</span></li>`).join("");
     };
     btn.onclick = () => { pop.hidden = !pop.hidden; if (!pop.hidden) { paint(); q.focus(); } };
     q.oninput = paint;
@@ -230,7 +265,8 @@
     const sales = [String(periodRange().year), S.saleQ ? `V${S.saleQ} only` : "", S.saleTypes.size ? `${S.saleTypes.size} type${S.saleTypes.size > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ");
     $("sum-sales").textContent = sales;
     $("sum-list").textContent = S.list ? `${fmt(S.list.fps.size)} parcels` : "None";
-    $("sum-display").textContent = { light: "Light", aerial: "Satellite", topo: "Topo" }[S.basemap] || "";
+    const nLayers = Object.values(S.layers).filter(Boolean).length;
+    $("sum-display").textContent = ({ light: "Light", aerial: "Satellite", topo: "Topo" }[S.basemap] || "") + (nLayers ? ` · ${nLayers} layer${nLayers > 1 ? "s" : ""}` : "");
   }
   const titleish = (s) => s.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase());
   function salesChanged() {
@@ -289,13 +325,30 @@
     const areaItems = Object.entries(areaCounts).map(([n, c]) => [n, n, c]);
     const econCounts = {}; for (const a of A) if (a.econ) econCounts[a.econ] = (econCounts[a.econ] || 0) + 1;
     const econItems = Object.entries(econCounts).map(([n, c]) => [n, econName(n), c]);
-    for (const [id, noun, items, set] of [["area-ms", "Property area", areaItems, S.areas], ["econ-ms", "Economic area", econItems, S.econs], ["lea-ms", "LEA", LEA_CI != null && attrItems(LEA_CI), S.leas],
-                                          ["nbhd-ms", "Neighborhood", NBHD_CI != null && attrItems(NBHD_CI), S.nbhds]]) {
-      multiSelect($(id), { noun, items, set });
-      multiSelect($("s-" + id), { noun, items, set });
+    for (const [id, noun, items, set, dim] of [["area-ms", "Property area", areaItems, S.areas, "area"], ["econ-ms", "Economic area", econItems, S.econs, "econ"],
+                                               ["lea-ms", "LEA", LEA_CI != null && attrItems(LEA_CI), S.leas, "lea"], ["nbhd-ms", "Neighborhood", NBHD_CI != null && attrItems(NBHD_CI), S.nbhds, "nbhd"]]) {
+      const onChange = () => { S.lastDim = dim; filtersChanged(); autoZoom(); };
+      multiSelect($(id), { noun, items, set, dim, onChange });
+      multiSelect($("s-" + id), { noun, items, set, onChange });
     }
     $("zoom-area").onclick = zoomToArea;
-    $("area-outline").onchange = () => { S.areaOutline = $("area-outline").checked; applyArea(); };
+    $("area-outline").onchange = () => { S.areaOutline = $("area-outline").checked; $("color-by").disabled = !S.areaOutline; filtersChanged(); };
+    $("color-by").onchange = () => { S.colorBy = $("color-by").value; filtersChanged(); };
+    $("area-key-toggle").onclick = () => {
+      const open = $("area-key").classList.toggle("closed"); $("area-key-toggle").setAttribute("aria-expanded", !open);
+      prefs.keyClosed = open; savePrefs();
+    };
+    if (prefs.keyClosed) { $("area-key").classList.add("closed"); $("area-key-toggle").setAttribute("aria-expanded", "false"); }
+    $("area-key-body").onclick = (e) => {
+      const r = e.target.closest("[data-key-v]"); if (!r) return;
+      const k = colorDim(); if (!k) return;
+      const v = DIMS[k].set().has(r.dataset.keyV) ? r.dataset.keyV : +r.dataset.keyV;
+      zoomToAccounts(A.filter((a) => areaPass(a) && DIMS[k].vals(a).includes(v)));
+    };
+    document.querySelectorAll("input[data-layer]").forEach((cb) => {
+      cb.checked = S.layers[cb.dataset.layer] = !!(prefs.layers || {})[cb.dataset.layer];
+      cb.onchange = () => { S.layers[cb.dataset.layer] = cb.checked; prefs.layers = { ...S.layers }; savePrefs(); applyCityLayers(); renderStepSums(); };
+    });
     initList();
     $("whole-county").onclick = () => { S.areas.clear(); S.econs.clear(); S.leas.clear(); S.nbhds.clear(); filtersChanged(); zoomToArea(); };
     $("show-flags").onchange = () => { S.showFlags = $("show-flags").checked; document.querySelector(".flag-legend").hidden = !S.showFlags; applyFlags(); };
@@ -453,8 +506,10 @@
       style: { version: 8, glyphs: "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf", sources, layers },
       bounds: COUNTY_BOUNDS, fitBoundsOptions: { padding: 20 }, maxZoom: 19, attributionControl: { compact: true },
     });
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-left");
+    // Compass: shows which way north is when the map is turned (right-drag or two-finger twist); click it to turn back to north.
+    map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }), "top-left");
     map.addControl(new maplibregl.ScaleControl({ unit: "imperial" }), "bottom-left");
+    const cityData = fetch("assets/layers/city-utility-service-areas.geojson").then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status))));
     map.on("load", () => {
       map.addSource("parcels", { type: "geojson", data: "data/parcels.geojson", tolerance: 0.25, buffer: 32 });
       map.addSource("labels", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
@@ -463,8 +518,10 @@
       map.addLayer({ id: "parcels-fill", type: "fill", source: "parcels", paint: {} });
       map.addLayer({ id: "parcels-line", type: "line", source: "parcels", paint: {} });
       // Area outline (state "ar": 1 = in the selected area, 2 = outside it, faded) and imported list (state "l").
+      // State "rc" colors the outline by area (1-4 = color, 5 = past 4 colors, 6 = more than one picked area); colored outlines get a dark edge.
+      map.addLayer({ id: "parcels-area-edge", type: "line", source: "parcels", paint: {
+        "line-color": "rgba(11,11,11,0.7)", "line-width": ["interpolate", ["linear"], ["zoom"], 9, 3.4, 15, 5.2] } });
       map.addLayer({ id: "parcels-area", type: "line", source: "parcels", paint: {
-        "line-width": ["interpolate", ["linear"], ["zoom"], 9, 0.8, 15, 1.8],
         "line-opacity": ["case", ["==", ["feature-state", "ar"], 1], 0.9, 0] } });
       map.addLayer({ id: "parcels-list-edge", type: "line", source: "parcels", paint: {
         "line-color": "#3a3000", "line-width": ["interpolate", ["linear"], ["zoom"], 9, 2.6, 15, 5.5],
@@ -483,6 +540,32 @@
         "text-field": ["get", "t"], "text-font": ["Noto Sans Medium"], "text-size": ["interpolate", ["linear"], ["zoom"], 14, 10, 18, 12.5],
         "text-max-width": 14, "text-line-height": 1.2, "text-padding": 3,
         "icon-image": "callout-light", "icon-text-fit": "both", "icon-text-fit-padding": [3, 6, 3, 6] }, paint: {} });
+      // One name label per colored area (LEA code, neighborhood, ...), at the member parcel nearest the area's middle.
+      map.addSource("area-labels", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({ id: "area-label-dot", type: "circle", source: "area-labels", paint: {
+        "circle-radius": 6, "circle-color": ["get", "c"], "circle-stroke-width": 2, "circle-stroke-color": "#0b0b0b" } });
+      map.addLayer({ id: "area-label-text", type: "symbol", source: "area-labels", layout: {
+        "text-field": ["get", "t"], "text-font": ["Noto Sans Medium"], "text-size": 12.5, "text-anchor": "left", "text-offset": [0.9, 0],
+        "text-max-width": 12, "text-allow-overlap": false, "text-optional": true }, paint: { "text-halo-width": 1.6 } });
+      cityData.then((d) => {
+        map.addSource("city", { type: "geojson", data: d });
+        const dash = { electric: [3, 1.5], water_sewer: [1, 1.2], refuse: [4, 1, 1, 1] };
+        for (const k of Object.keys(CITY_LAYERS)) {
+          const filter = ["==", ["get", "layer"], k], hide = { visibility: "none" };
+          map.addLayer({ id: `city-${k}-casing`, type: "line", source: "city", filter, layout: { ...hide }, paint: { "line-width": 4.6, "line-opacity": 0.85 } }, "parcels-list-edge");
+          map.addLayer({ id: `city-${k}`, type: "line", source: "city", filter, layout: { ...hide }, paint: { "line-width": 2.4, "line-dasharray": dash[k] } }, "parcels-list-edge");
+          map.addLayer({ id: `city-${k}-label`, type: "symbol", source: "city", filter, minzoom: 11, layout: {
+            ...hide, "symbol-placement": k === "refuse" ? "point" : "line", "symbol-spacing": 420,
+            "text-field": k === "refuse" ? ["concat", ["get", "day"], " pickup"] : CITY_LAYERS[k], "text-font": ["Noto Sans Medium"], "text-size": 11.5,
+          }, paint: { "text-halo-width": 1.6 } });
+        }
+        const ed = d.sourceEdited ? new Date(d.sourceEdited + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
+        $("city-note").textContent = `From the City of Gunnison${ed ? `, last edited by the City ${ed}` : ""}. For reference only; not a county record.`;
+        setBasemap(S.basemap); applyCityLayers();
+      }).catch(() => {
+        $("city-note").textContent = "The City of Gunnison layers could not be loaded.";
+        document.querySelectorAll("input[data-layer]").forEach((cb) => { cb.disabled = true; });
+      });
       setBasemap(S.basemap);
       const ready = () => {
         if (mapReady || !map.isSourceLoaded("parcels")) return;
@@ -512,6 +595,8 @@
           const vs = a.hasLand ? a.attrs[S.ci].map((v) => VALUES[S.ci][v]) : null;
           html += `<div class="m">${esc(CATS[S.ci].label)}: ${esc(vs == null ? (a.landExpected ? "no land data" : "mobile home / condo, no land line") : vs.length ? vs.join(", ") : "—")}</div>`;
           const s = saleInPeriod(a); if (s) html += `<div class="m">Qualified sale ${mdy(s.date)} · ${money(s.price)}${s.q ? " · " + qLabel(s) : ""}</div>`;
+          const sl = lastAreaSlots;
+          if (sl) for (const v of DIMS[sl.k].vals(a)) if (sl.m.has(v)) html += `<div class="m"><i class="ms-sw" style="border-color:${areaColor(sl.m.get(v))}"></i>${esc(DIMS[sl.k].name(v))}</div>`;
           if (S.list && S.list.fps.has(fp)) html += `<div class="m"><span class="list-tag">On imported list</span></div>`;
         } else html += `<div class="m">No account in current data</div>`;
         tipEl.innerHTML = html; tipEl.hidden = false;
@@ -538,17 +623,41 @@
     fill.push(8, hexA(MULTI[dark ? "dark" : "light"], fillA), "rgba(0,0,0,0)");
     const stroke = ["match", h]; slots.forEach((c, i) => stroke.push(i + 2, c)); stroke.push(8, MULTI[dark ? "dark" : "light"], line);
     const out = ["==", ["feature-state", "ar"], 2];
-    map.setPaintProperty("parcels-fill", "fill-color", fill);
+    // Area colors: outline by state "rc"; light tint (state "rt") only while no attribute value is picked.
+    const ac = AREA_COLORS[mode()], navy = AREA_NAVY[dark ? "dark" : "light"], multi = MULTI[dark ? "dark" : "light"];
+    const rc = ["coalesce", ["feature-state", "rc"], 0], rt = ["coalesce", ["feature-state", "rt"], 0];
+    const colored = ["all", [">=", rc, 1], ["!=", rc, 5]];
+    const tint = ["match", rt, 1, hexA(ac[0], 0.34), 2, hexA(ac[1], 0.34), 3, hexA(ac[2], 0.34), 4, hexA(ac[3], 0.34), 5, hexA(navy, 0.16), 6, hexA(multi, 0.3), "rgba(0,0,0,0)"];
+    map.setPaintProperty("parcels-fill", "fill-color", ["case", [">", rt, 0], tint, fill]);
+    map.setPaintProperty("parcels-area-edge", "line-opacity", ["case", ["all", ["==", ["feature-state", "ar"], 1], colored], 0.75, 0]);
+    map.setPaintProperty("parcels-area", "line-width", ["interpolate", ["linear"], ["zoom"], 9, ["case", colored, 2.2, 0.8], 15, ["case", colored, 3, 1.8]]);
+    map.setPaintProperty("area-label-text", "text-color", dark ? "#ffffff" : "#0b0b0b");
+    map.setPaintProperty("area-label-text", "text-halo-color", dark ? "rgba(13,13,13,0.9)" : "rgba(252,252,251,0.95)");
+    map.setPaintProperty("area-label-dot", "circle-stroke-color", dark ? "#ffffff" : "#0b0b0b");
+    for (const k of Object.keys(CITY_LAYERS)) {
+      if (!map.getLayer(`city-${k}`)) continue;
+      map.setPaintProperty(`city-${k}`, "line-color", dark ? "#ffffff" : "#1d1d1b");
+      map.setPaintProperty(`city-${k}-casing`, "line-color", dark ? "rgba(13,13,13,0.8)" : "rgba(255,255,255,0.9)");
+      map.setPaintProperty(`city-${k}-label`, "text-color", dark ? "#ffffff" : "#1d1d1b");
+      map.setPaintProperty(`city-${k}-label`, "text-halo-color", dark ? "rgba(13,13,13,0.9)" : "rgba(255,255,255,0.95)");
+    }
     map.setPaintProperty("parcels-fill", "fill-opacity", ["case", out, 0.3, 1]);
     map.setPaintProperty("parcels-line", "line-color", stroke);
     map.setPaintProperty("parcels-line", "line-opacity", ["case", out, 0.3, 1]);
-    map.setPaintProperty("parcels-area", "line-color", dark ? "#ffffff" : "#1d2b44");
+    map.setPaintProperty("parcels-area", "line-color", ["match", rc, 1, ac[0], 2, ac[1], 3, ac[2], 4, ac[3], 6, multi, navy]);
     map.setPaintProperty("parcels-line", "line-width", ["interpolate", ["linear"], ["zoom"], 8, ["case", [">=", h, 2], 0.6, 0.15], 13, ["case", [">=", h, 2], 1, 0.5], 17, ["case", [">=", h, 2], 1.6, 1.1]]);
     map.setPaintProperty("parcels-sel", "line-color", dark ? "#ffffff" : "#0b0b0b");
     map.setPaintProperty("labels", "text-color", dark ? "#ffffff" : "#0b0b0b");
     map.setLayoutProperty("labels", "icon-image", dark ? "callout-dark" : "callout-light");
     map.setPaintProperty("sold", "circle-color", dark ? "#ffffff" : "#0b0b0b");
     map.setPaintProperty("sold", "circle-stroke-color", dark ? "#0b0b0b" : "#ffffff");
+    if (mapReady) applyArea();   // key swatches and labels follow the basemap
+  }
+  function applyCityLayers() {
+    document.querySelectorAll(".city-legend").forEach((el) => { el.hidden = !S.layers[el.dataset.layer]; });
+    if (!map || !map.getLayer("city-electric")) return;
+    for (const k of Object.keys(CITY_LAYERS)) for (const id of [`city-${k}-casing`, `city-${k}`, `city-${k}-label`])
+      map.setLayoutProperty(id, "visibility", S.layers[k] ? "visible" : "none");
   }
 
   let lastMatchFps = [];
@@ -598,14 +707,62 @@
 
   // Outline the parcels in the selected area (property area / economic area / LEA / neighborhood) and fade the rest.
   // Account type filters don't count here: the outline shows the area itself.
+  let lastAreaSlots = null;
   function applyArea() {
     const on = S.areaOutline && areaFiltered();
-    document.querySelector(".area-legend").hidden = !on;
+    const sl = on ? areaSlots() : null; lastAreaSlots = sl;
+    document.querySelector(".area-legend").hidden = !on || !!sl;   // when colored, the area key explains the outlines
+    const R = new Uint8Array(GEO.length), RC = new Uint8Array(GEO.length);
+    const stats = new Map(sl ? [...sl.m.keys()].map((v) => [v, { n: 0, fps: [] }]) : []);
+    if (on) {
+      R.fill(2);
+      A.forEach((a) => {
+        if (!areaPass(a)) return;
+        let st = 0;
+        if (sl) for (const v of DIMS[sl.k].vals(a)) {
+          if (!sl.m.has(v)) continue;
+          const x = stats.get(v); x.n++; if (a.fp >= 0) x.fps.push(a.fp);
+          const s = Math.min(sl.m.get(v), AREA_MAX) + 1;           // 1-4 colored, 5 = past 4 colors
+          st = st && st !== s ? 6 : s;                              // 6 = in more than one picked area
+        }
+        if (a.fp < 0) return;
+        R[a.fp] = 1;
+        const cur = RC[a.fp]; RC[a.fp] = cur && st && cur !== st ? 6 : st || cur;   // stacked accounts in different areas → "more than one"
+      });
+    }
+    renderAreaKey(sl, stats, RC);
     if (!mapReady) return;
-    const R = new Uint8Array(GEO.length);
-    if (on) { R.fill(2); A.forEach((a) => { if (a.fp >= 0 && areaPass(a)) R[a.fp] = 1; }); }
-    for (let i = 0; i < R.length; i++) if (!prevArea || prevArea[i] !== R[i]) map.setFeatureState({ source: "parcels", id: i }, { ar: R[i] });
-    prevArea = R;
+    const tint = !!sl && S.sel.size === 0;
+    const K = new Uint8Array(GEO.length);
+    for (let i = 0; i < K.length; i++) {
+      K[i] = R[i] | (RC[i] << 2) | (tint ? 32 : 0);
+      if (!prevArea || prevArea[i] !== K[i]) map.setFeatureState({ source: "parcels", id: i }, { ar: R[i], rc: RC[i], rt: tint ? RC[i] : 0 });
+    }
+    prevArea = K;
+    const features = [];
+    if (sl) for (const [v, x] of stats) {
+      const pts = x.fps.map((fp) => GEO[fp][4]).filter(Boolean); if (!pts.length) continue;
+      const mx = pts.reduce((t, p) => t + p[0], 0) / pts.length, my = pts.reduce((t, p) => t + p[1], 0) / pts.length;
+      let best = pts[0], bd = Infinity;
+      for (const p of pts) { const d = (p[0] - mx) ** 2 + (p[1] - my) ** 2; if (d < bd) { bd = d; best = p; } }
+      features.push({ type: "Feature", geometry: { type: "Point", coordinates: best }, properties: { t: DIMS[sl.k].short(v), c: areaColor(sl.m.get(v)) } });
+    }
+    map.getSource("area-labels").setData({ type: "FeatureCollection", features });
+  }
+  // Small key on the map: one row per picked area of the colored list (click to zoom to it).
+  function renderAreaKey(sl, stats, RC) {
+    const note = $("color-by-note");
+    note.hidden = !(S.areaOutline && S.colorBy !== "auto" && S.colorBy !== "none" && !sl);
+    if (!note.hidden) note.textContent = `Pick one or more ${DIMS[S.colorBy].noun}s above to color them.`;
+    $("area-key").hidden = !sl;
+    if (!sl) return;
+    const d = DIMS[sl.k], noun = d.noun;
+    $("area-key-title").textContent = `${noun[0].toUpperCase() + noun.slice(1)} colors`;
+    const rows = [...sl.m.entries()].sort((x, y) => x[1] - y[1]).map(([v, slot]) =>
+      `<button class="key-row" type="button" data-key-v="${esc(String(v))}" title="Zoom to this ${esc(noun)}"><i class="sw-ring" style="border-color:${areaColor(slot)}"></i><span class="nm">${esc(d.name(v))}</span><span class="n">${fmt(stats.get(v).n)}</span></button>`);
+    if (RC.includes(6)) rows.push(`<div class="key-row static"><i class="sw-ring" style="border-color:${MULTI[mapDark() ? "dark" : "light"]}"></i><span class="nm">In more than one picked ${esc(noun)}</span></div>`);
+    if (sl.m.size > AREA_MAX) rows.push(`<div class="key-note">Only ${AREA_MAX} colors. The rest keep the plain outline; every ${esc(noun)} is labeled on the map.</div>`);
+    $("area-key-body").innerHTML = rows.join("");
   }
   function applyList() {
     document.querySelector(".list-legend").hidden = !S.list;
@@ -949,6 +1106,7 @@ Click to view on map" style="cursor:pointer">
       ["Accounts", `${fmt(A.length)} (${fmt(A.filter((a) => a.hasLand).length)} with land data)`],
       ["Accounts with a qualified sale (10 yrs)", fmt(A.filter((a) => a.sales.length).length)],
       ["Parcel shapes", fmt(GEO.length)],
+      ["City of Gunnison layers", "Electric, water and sewer, and refuse service areas from the City's public ArcGIS layer; a copy ships with each release"],
     ].map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
     $("about-checks").innerHTML = Object.values(ISSUES).map((x) => `<li><strong>${esc(x.label)}</strong> — ${esc(x.about)}</li>`).join("");
     fetch("version.json", { cache: "no-cache" }).then((r) => (r.ok ? r.json() : null)).then((v) => {
@@ -1151,8 +1309,8 @@ Click to view on map" style="cursor:pointer">
       setTimeout(() => {
         if (e.kind === "Account") focusAccount(e.i);
         else if (e.kind === "Subdivision") zoomToAccounts(e.ids.map((i) => A[i]));
-        else if (e.kind === "LEA" || e.kind === "Neighborhood") { (e.kind === "LEA" ? S.leas : S.nbhds).add(e.v); filtersChanged(); zoomToAccounts(A.filter(acctPass)); }
-        else { e.econ ? S.econs.add(e.econ) : S.areas.add(e.area); filtersChanged(); zoomToArea(); }
+        else if (e.kind === "LEA" || e.kind === "Neighborhood") { (e.kind === "LEA" ? S.leas : S.nbhds).add(e.v); S.lastDim = e.kind === "LEA" ? "lea" : "nbhd"; filtersChanged(); zoomToAccounts(A.filter(acctPass)); }
+        else { e.econ ? S.econs.add(e.econ) : S.areas.add(e.area); S.lastDim = e.econ ? "econ" : "area"; filtersChanged(); zoomToArea(); }
       }, 30);
     };
     inp.addEventListener("input", debounce(run, 90));

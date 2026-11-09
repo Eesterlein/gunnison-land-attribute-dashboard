@@ -40,6 +40,7 @@ Two design choices keep it simple:
 |---|---|---|
 | Five RealWare ListBuilder searches (`LAD - Accounts`, `Land Attributes`, `Land Details`, `Sales`, `Values`) | RealWare → server → `wwwroot/data/raw/*.json` | Weekly, plus the Refresh button |
 | Tax-parcel shapes | County `Taxparcelassessor` shapefile → `scripts/build_geometry.py` | When GIS provides a new shapefile |
+| City of Gunnison utility service areas (electric, water and sewer, refuse) | City's public ArcGIS layer → `scripts/fetch_city_layers.py` → `assets/layers/city-utility-service-areas.geojson` | Before a release, or when the City updates the layer |
 
 `config/searches.json` lists each search's query ID and the columns kept. It's the single place to change if a search is renamed, gets a new ID, or adds a column.
 

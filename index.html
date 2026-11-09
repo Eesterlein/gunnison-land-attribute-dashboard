@@ -45,6 +45,16 @@
         <div class="sub-lbl">Neighborhood</div>
         <div id="nbhd-ms" class="ms"></div>
         <label class="check"><input type="checkbox" id="area-outline" checked> Outline the parcels in the selected area and fade the rest</label>
+        <div class="row gap color-by-row"><label class="sub-lbl" for="color-by">Outline colors</label>
+          <select id="color-by" aria-label="Outline colors">
+            <option value="auto">Auto (last list picked)</option>
+            <option value="lea">By LEA</option>
+            <option value="nbhd">By neighborhood</option>
+            <option value="econ">By economic area</option>
+            <option value="area">By property area</option>
+            <option value="none">One color</option>
+          </select></div>
+        <div id="color-by-note" class="muted small" hidden></div>
         <div class="row gap step-actions"><button id="zoom-area" class="btn small" type="button" title="Zoom back out to the selected area">Back to area</button><button id="whole-county" class="btn small ghost" type="button">Whole county</button></div>
       </div>
     </section>
@@ -119,6 +129,11 @@
       <div class="step-body">
         <label class="check"><input type="checkbox" id="lbl-acct"> Callout: account number</label>
         <div id="label-note" class="muted small" hidden>Zoom in to see callouts.</div>
+        <div class="sub-lbl">City of Gunnison layers</div>
+        <label class="check"><input type="checkbox" data-layer="electric"> Electric service area</label>
+        <label class="check"><input type="checkbox" data-layer="water_sewer"> Water and sewer service area</label>
+        <label class="check"><input type="checkbox" data-layer="refuse"> Refuse and recycling pickup days</label>
+        <div id="city-note" class="muted small"></div>
         <div class="sub-lbl">Basemap</div>
         <div class="seg" id="basemap">
           <button data-bm="light" class="on">Light</button>
@@ -139,6 +154,13 @@
       <span class="area-legend" hidden><i class="sw sw-area"></i>In selected area</span>
       <span class="list-legend" hidden><i class="sw sw-list"></i>On imported list</span>
       <span class="sold-legend" hidden><i class="sw-dot"></i>Qualified sale in appraisal period</span>
+      <span class="city-legend" data-layer="electric" hidden><i class="sw-dash sw-electric"></i>City electric service area</span>
+      <span class="city-legend" data-layer="water_sewer" hidden><i class="sw-dash sw-water"></i>City water and sewer service area</span>
+      <span class="city-legend" data-layer="refuse" hidden><i class="sw-dash sw-refuse"></i>City refuse pickup areas (labeled by day)</span>
+    </div>
+    <div class="area-key" id="area-key" hidden>
+      <button class="area-key-head" id="area-key-toggle" type="button" aria-expanded="true"><span id="area-key-title">Area colors</span><span class="chev" aria-hidden="true">▾</span></button>
+      <div class="area-key-body" id="area-key-body"></div>
     </div>
     <div id="loading" class="loading">Loading parcels…</div>
     <div id="hover-tip" class="hover-tip" hidden></div>
